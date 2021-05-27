@@ -8,9 +8,15 @@ from torch.utils.data import Dataset
 
 
 class IAMDataset(Dataset):
-    def __init__(self, images_dir, markup_filepath):
+    def __init__(self, images_dir, markup_filepath, split_filepath):
         self.markup = self._read_markup_file(markup_filepath)
-        self.imgs_paths = list(Path(images_dir).rglob('*.png'))
+
+        # read images from split only
+        with open(split_filepath, 'r') as f:
+            names = [x[:-1] for x in f.readlines()]
+
+        self.imgs_paths = [x for x in Path(images_dir).rglob('*.png')
+                           if x.stem in names]
 
     def __len__(self):
         return len(self.imgs_paths)
