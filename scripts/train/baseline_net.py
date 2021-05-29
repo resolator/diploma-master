@@ -10,7 +10,7 @@ from torch import nn
 class BaselineNet(nn.Module):
     def __init__(self,
                  height,
-                 enc_hidden_size=128,
+                 enc_hidden_size=512,
                  enc_num_layers=1):
         super().__init__()
 
@@ -18,11 +18,12 @@ class BaselineNet(nn.Module):
         self.encoder = Encoder(input_size=self._get_encoder_input_size(height),
                                hidden_size=enc_hidden_size,
                                num_layers=enc_num_layers)
-        self.decoder = nn.LSTM(input_size=self._)
 
     def forward(self, x):
         x = self.fe(x)
-        x, h = self.encoder(x)
+        h = self.encoder(x)
+
+        return h
 
     @torch.no_grad()
     def _get_encoder_input_size(self, height):
@@ -47,28 +48,40 @@ class FeatureExtractor(nn.Module):
 
 
 class Encoder(nn.Module):
-    def __init__(self, input_size, hidden_size=128, num_layers=1):
+    def __init__(self,
+                 input_size,
+                 hidden_size=512,
+                 num_layers=3,
+                 bidirectional=True):
         super().__init__()
-        self.bidirectional = False
+        self.num_layers = num_layers
+        self.hidden_size = hidden_size
+        self.bidirectional = bidirectional
+        self.num_directions = 2 if self.bidirectional else 1
+
         self.lstm = nn.LSTM(input_size=input_size,
-                            hidden_size=hidden_size,
-                            num_layers=num_layers,
+                            hidden_size=self.hidden_size,
+                            num_layers=self.num_layers,
                             bidirectional=self.bidirectional)
         self.conv = nn.Conv1d(input_size, input_size, (1,))
 
     def forward(self, x):
-        seq = torch.transpose(x, 0, 1)  # seq_len(channels), bs, input_size
+        seq = x.permute(2, 0, 1)  # seq_len(width), bs, input_size(channels)
 
+        bs = x.size(0)
         hidden_states = []
-        h, c = self.init_hidden(x.size(0), x.dtype, x.device)
+        h, c = self.init_hidden(bs, x.dtype, x.device)
         for x_t in seq:
             y, (h, c) = self.lstm(x_t.unsqueeze(0), (h, c))
-            hidden_states.append(h.squeeze(0))
+            hidden_states.append(h.view(self.num_layers,
+                                        self.num_directions,
+                                        bs,
+                                        self.hidden_size)[-1, -1])
 
         y = torch.stack(hidden_states, dim=0)  # seq_len, bs, hidden_size
-        y = torch.transpose(y, 0, 1)  # bs, seq_len(channels), hidden_size
+        y = y.permute(1, 2, 0)  # bs, seq_len(width), hidden_size
 
-        return self.conv(y)  # bs, channels, hidden_size
+        return self.conv(y)  # bs, channels, width
 
     def init_hidden(self, bs, dtype, device):
         num_directions = 2 if self.bidirectional else 1
@@ -80,14 +93,3 @@ class Encoder(nn.Module):
                               dtype=dtype, device=device)
 
         return h_zeros, c_zeros
-
-
-class AttnDecoderRNN(nn.Module):
-    def __init__(self, hidden_size, output_size):
-        super(AttnDecoderRNN, self).__init__()
-
-    def forward(self, input, hidden, encoder_outputs):
-        pass
-
-    def initHidden(self, device):
-        return torch.zeros(1, 1, self.hidden_size, device=device)

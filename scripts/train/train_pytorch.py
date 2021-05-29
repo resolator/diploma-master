@@ -17,6 +17,8 @@ from torch.utils.tensorboard import SummaryWriter
 def get_args():
     """Arguments parser."""
     parser = configargparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--config', is_config_file=True,
+                        help='Path to config file.')
 
     # dataset
     parser.add_argument('--images-dir', type=Path, required=True,
