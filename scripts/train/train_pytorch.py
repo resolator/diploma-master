@@ -23,8 +23,8 @@ def get_args():
     # dataset
     parser.add_argument('--images-dir', type=Path, required=True,
                         help='Path to root dir with images (ex. iam/lines/).')
-    parser.add_argument('--mkp-file', type=Path, required=True,
-                        help='Path to markup file (ex. iam/ascii/lines.txt).')
+    parser.add_argument('--mkp-dir', type=Path, required=True,
+                        help='Path to dir with xml files (ex. iam/xml).')
     parser.add_argument('--train-split', type=Path, required=True,
                         help='Path to train split file. Can be generated '
                              'using scripts/utils/gen_split_file.py.')
@@ -127,8 +127,11 @@ def main():
     writer = SummaryWriter(logs_dir)
 
     # datasets
-    ds_train = IAMDataset(args.images_dir, args.mkp_file, args.train_split)
-    ds_valid = IAMDataset(args.images_dir, args.mkp_file, args.valid_split)
+    common_args = {'images_dir': args.images_dir,
+                   'markup_filepath': args.mkp_dir,
+                   'height': args.height}
+    ds_train = IAMDataset(split_filepath=args.train_split, **common_args)
+    ds_valid = IAMDataset(split_filepath=args.valid_split, **common_args)
 
     loaders = {
         'train': DataLoader(ds_train, args.bs, True, num_workers=args.workers),

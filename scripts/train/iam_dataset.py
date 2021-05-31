@@ -8,16 +8,32 @@ import numpy as np
 
 from pathlib import Path
 from torch.utils.data import Dataset
+from xml.etree import ElementTree as ET
 
 
 class IAMDataset(Dataset):
+    """PyTorch wrapper for IAM dataset."""
     def __init__(self,
                  images_dir,
-                 markup_filepath,
+                 markup_dir,
                  split_filepath,
                  height=119):
+        """Initialize IAM dataset.
+
+        Parameters
+        ----------
+        images_dir : str or pathlib.Path
+            Path to root dir with images (ex. iam/lines/).
+        markup_dir : str or pathlib.Path
+            Path to markup dir with xml files (ex. iam/xml).
+        split_filepath : str or pathlib.Path
+            Path to split file.
+        height : int
+            Target height for images.
+
+        """
         self.height = height
-        self.markup = self._read_markup_file(markup_filepath)
+        self.markup = IAMDataset._read_markup(markup_dir)
 
         # read images from split only
         with open(split_filepath, 'r') as f:
@@ -53,22 +69,15 @@ class IAMDataset(Dataset):
         return img, text
 
     @staticmethod
-    def _read_markup_file(markup_filepath):
-        # read markup file lines
-        with open(markup_filepath, 'r') as f:
-            lines = f.readlines()
-
+    def _read_markup(markup_dir):
         markup = {}
-        for line in lines:
-            # skip comments
-            if line[0] == '#':
-                continue
+        for xml_path in Path(markup_dir).rglob('*.xml'):
+            lines = ET.parse(xml_path).getroot()[1]
+            for line in lines:
+                line_id = line.attrib['id']
+                line_text = line.attrib['text']
 
-            # make a record
-            line = line.split(' ')
-            name = line[0]
-            text = line[-1].split('|')[:-1]
-            markup[name] = text
+                markup[line_id] = line_text
 
         return markup
 
@@ -81,7 +90,8 @@ class IAMDataset(Dataset):
         for i in range(n_samples):
             img, text = self[i]
             img = ((img.squeeze() / 2 + 0.5) * 255).numpy().astype(np.uint8)
-            print(' '.join(text))
+            print(text)
+
             cv2.imshow('img', img)
             cv2.waitKey()
 
