@@ -14,8 +14,10 @@ class BaselineNet(nn.Module):
                  enc_hidden_size=256,
                  enc_num_layers=3,
                  enc_bidirectional=True,
-                 emb_size=64):
+                 emb_size=64,
+                 max_len=150):
         super().__init__()
+        self.max_len = max_len
         self.c2i, self.i2c = BaselineNet._build_alphabet()
         enc_out_channels = len(self.i2c)
 
@@ -28,7 +30,9 @@ class BaselineNet(nn.Module):
         self.decoder = AttentionDecoder(enc_out_channels,
                                         emb_size,
                                         sos_idx=self.c2i['<sos>'],
-                                        eos_idx=self.c2i['<eos>'])
+                                        eos_idx=self.c2i['<eos>'],
+                                        max_len=self.max_len)
+        self.ctc_loss = nn.CTCLoss(blank=self.c2i['<blank>'])
 
     def forward(self, x):
         x = self.fe(x)
@@ -36,6 +40,18 @@ class BaselineNet(nn.Module):
         decoded = self.decoder(h)
 
         return decoded
+
+    def calc_loss(self, log_probs, targets, targets_lens, preds):
+        preds = preds.permute(1, 0)
+        preds_lens = [self.max_len] * targets.size(0)
+        last_sample = -1
+        for sample, idx in torch.nonzero(preds == self.c2i['<eos>']):
+            if sample != last_sample:
+                last_sample = sample
+                preds_lens[sample] = idx
+        preds_lens = torch.tensor(preds_lens, dtype=torch.int64)
+
+        return self.ctc_loss(log_probs, targets, preds_lens, targets_lens)
 
     @torch.no_grad()
     def _get_encoder_input_size(self, height):
@@ -46,8 +62,8 @@ class BaselineNet(nn.Module):
 
     @staticmethod
     def _build_alphabet():
-        symbs = ['<sos>', '<eos>', ' ', '!', '"', '#', '&', '\'', '(', ')',
-                 '*', '+', ',', '-', '.', '/', ':', ';', '?']
+        symbs = ['<blank>', '<sos>', '<eos>', ' ', '!', '"', '#', '&', '\'',
+                 '(', ')', '*', '+', ',', '-', '.', '/', ':', ';', '?']
         i2c = symbs + list(digits) + list(ascii_letters)
         c2i = {c: idx for idx, c in enumerate(i2c)}
 
@@ -136,11 +152,13 @@ class AttentionDecoder(nn.Module):
                  emb_size=64,
                  hidden_size=256,
                  dropout=0.5,
-                 sos_idx=0,
-                 eos_idx=1):
+                 sos_idx=1,
+                 eos_idx=2,
+                 max_len=150):
         super().__init__()
         self.sos_idx = sos_idx
         self.eos_idx = eos_idx
+        self.max_len = max_len
 
         self.emb_size = emb_size
         self.bidirectional = False
@@ -164,11 +182,11 @@ class AttentionDecoder(nn.Module):
         seq = embedded.permute(1, 0, 2)  # seq_len(width), bs, emb_size
 
         bs = seq.size(1)
-        preds = []
+        probs, preds = [], []
         h, c = self.init_hidden(bs, seq.dtype, seq.device)
         a = torch.zeros(bs, self.emb_size)
         y = self.emb(torch.ones(bs, dtype=torch.int64) * self.sos_idx)  # <sos>
-        for i in range(100):
+        for i in range(self.max_len):
             y = torch.cat([y, a], dim=1)  # bs, emb_size * 2
             y, (h, c) = self.lstm(y.unsqueeze(0), (h, c))
 
@@ -176,19 +194,21 @@ class AttentionDecoder(nn.Module):
             att_weights = self.att(embedded, h.squeeze(0))  # bs, width, v_size
             a = torch.sum(embedded * att_weights, dim=1)  # bs, emb_size
 
-            # character prediction
+            # calc probs
             y = self.fc(y.squeeze())  # bs, alphabet_size
-            pred = torch.argmax(F.softmax(y, dim=1), dim=1)
-            preds.append(pred)
+            prob = F.softmax(y, dim=1)
+            probs.append(torch.log(prob))  # for CTCLoss
 
             # check end of prediction
+            pred = torch.argmax(prob, dim=1)
+            preds.append(pred)
             if (pred == self.eos_idx).sum() == pred.shape[0]:
                 break
 
             # lstm input preparation
             y = self.emb(pred)
 
-        return preds
+        return torch.stack(probs), torch.stack(preds)
 
     def init_hidden(self, bs, dtype, device):
         num_directions = 2 if self.bidirectional else 1
@@ -222,7 +242,7 @@ class AttentionBahdanau(nn.Module):
 
 
 class PositionalEncoder(nn.Module):
-    def __init__(self, d_model, max_len=2000):
+    def __init__(self, d_model, max_len=150):
         super().__init__()
 
         pe = torch.zeros(max_len, d_model)
