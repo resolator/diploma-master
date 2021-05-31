@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*
 """Baseline net."""
 import torch
+import numpy as np
 import torch.nn.functional as F
 from torch import nn
 
@@ -12,7 +13,8 @@ class BaselineNet(nn.Module):
                  enc_hidden_size=256,
                  enc_num_layers=3,
                  enc_bidirectional=True,
-                 enc_out_channels=81):  # 78 + ' ' + <sos> + <eos>
+                 enc_out_channels=81,  # 78 + ' ' + <sos> + <eos>
+                 emb_size=64):
         super().__init__()
 
         self.fe = FeatureExtractor()
@@ -21,7 +23,7 @@ class BaselineNet(nn.Module):
                                num_layers=enc_num_layers,
                                bidirectional=enc_bidirectional,
                                out_channels=enc_out_channels)
-        self.decoder = AttentionDecoder(enc_out_channels)
+        self.decoder = AttentionDecoder(enc_out_channels, emb_size)
 
     def forward(self, x):
         x = self.fe(x)
@@ -127,6 +129,7 @@ class AttentionDecoder(nn.Module):
         self.hidden_size = hidden_size
 
         self.emb = nn.Embedding(enc_hidden_size, self.emb_size)
+        self.pe = PositionalEncoder(emb_size)
         self.lstm = nn.LSTM(input_size=self.emb_size * 2,
                             hidden_size=self.hidden_size)
         self.dropout = nn.Dropout(dropout)
@@ -138,6 +141,7 @@ class AttentionDecoder(nn.Module):
 
     def forward(self, enc_out):
         embedded = self.emb(enc_out)  # bs, width, emb_size
+        embedded = self.pe(embedded)
         seq = embedded.permute(1, 0, 2)  # seq_len(width), bs, emb_size
 
         bs = seq.size(1)
@@ -200,4 +204,18 @@ class AttentionBahdanau(nn.Module):
 
 
 class PositionalEncoder(nn.Module):
-    pass
+    def __init__(self, d_model, max_len=2000):
+        super().__init__()
+
+        pe = torch.zeros(max_len, d_model)
+        position = torch.arange(0, max_len, dtype=torch.float).unsqueeze(1)
+        a = torch.arange(0, d_model, 2) * (-np.log(10000.0) / d_model)
+        div_term = torch.exp(a) * position
+        pe[:, 0::2] = torch.sin(div_term)
+        pe[:, 1::2] = torch.cos(div_term)
+        pe = pe.unsqueeze(0)
+
+        self.register_buffer('pe', pe)
+
+    def forward(self, x):
+        return x + self.pe[:, x.size(1)]
