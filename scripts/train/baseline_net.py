@@ -5,6 +5,7 @@ import torch
 import numpy as np
 import torch.nn.functional as F
 from torch import nn
+from string import digits, ascii_letters
 
 
 class BaselineNet(nn.Module):
@@ -13,9 +14,10 @@ class BaselineNet(nn.Module):
                  enc_hidden_size=256,
                  enc_num_layers=3,
                  enc_bidirectional=True,
-                 enc_out_channels=81,  # 78 + ' ' + <sos> + <eos>
                  emb_size=64):
         super().__init__()
+        self.c2i, self.i2c = BaselineNet._build_alphabet()
+        enc_out_channels = len(self.i2c)
 
         self.fe = FeatureExtractor()
         self.encoder = Encoder(input_size=self._get_encoder_input_size(height),
@@ -23,7 +25,10 @@ class BaselineNet(nn.Module):
                                num_layers=enc_num_layers,
                                bidirectional=enc_bidirectional,
                                out_channels=enc_out_channels)
-        self.decoder = AttentionDecoder(enc_out_channels, emb_size)
+        self.decoder = AttentionDecoder(enc_out_channels,
+                                        emb_size,
+                                        sos_idx=self.c2i['<sos>'],
+                                        eos_idx=self.c2i['<eos>'])
 
     def forward(self, x):
         x = self.fe(x)
@@ -38,6 +43,15 @@ class BaselineNet(nn.Module):
         y = self.fe(x)
 
         return y.shape[1]
+
+    @staticmethod
+    def _build_alphabet():
+        symbs = ['<sos>', '<eos>', ' ', '!', '"', '#', '&', '\'', '(', ')',
+                 '*', '+', ',', '-', '.', '/', ':', ';', '?']
+        i2c = symbs + list(digits) + list(ascii_letters)
+        c2i = {c: idx for idx, c in enumerate(i2c)}
+
+        return c2i, i2c
 
 
 # dont forget about FPN
@@ -121,8 +135,13 @@ class AttentionDecoder(nn.Module):
                  enc_hidden_size=81,
                  emb_size=64,
                  hidden_size=256,
-                 dropout=0.5):
+                 dropout=0.5,
+                 sos_idx=0,
+                 eos_idx=1):
         super().__init__()
+        self.sos_idx = sos_idx
+        self.eos_idx = eos_idx
+
         self.emb_size = emb_size
         self.bidirectional = False
         self.num_layers = 1
@@ -148,7 +167,7 @@ class AttentionDecoder(nn.Module):
         preds = []
         h, c = self.init_hidden(bs, seq.dtype, seq.device)
         a = torch.zeros(bs, self.emb_size)
-        y = self.emb(torch.zeros(bs, dtype=torch.int64))  # <sos>
+        y = self.emb(torch.ones(bs, dtype=torch.int64) * self.sos_idx)  # <sos>
         for i in range(100):
             y = torch.cat([y, a], dim=1)  # bs, emb_size * 2
             y, (h, c) = self.lstm(y.unsqueeze(0), (h, c))
@@ -163,8 +182,7 @@ class AttentionDecoder(nn.Module):
             preds.append(pred)
 
             # check end of prediction
-            eos = 80
-            if (pred == eos).sum() == pred.shape[0]:
+            if (pred == self.eos_idx).sum() == pred.shape[0]:
                 break
 
             # lstm input preparation
