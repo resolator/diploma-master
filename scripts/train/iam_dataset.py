@@ -5,6 +5,7 @@ import cv2
 import torch
 
 import numpy as np
+import torch.nn.functional as F
 
 from pathlib import Path
 from torch.utils.data import Dataset
@@ -17,7 +18,9 @@ class IAMDataset(Dataset):
                  images_dir,
                  markup_dir,
                  split_filepath,
-                 height=119):
+                 c2i,
+                 height=119,
+                 max_len=127):
         """Initialize IAM dataset.
 
         Parameters
@@ -28,12 +31,17 @@ class IAMDataset(Dataset):
             Path to markup dir with xml files (ex. iam/xml).
         split_filepath : str or pathlib.Path
             Path to split file.
+        c2i : dict
+            Model's converter from character to index.
         height : int
             Target height for images.
+        max_len : int
+            Maximal length for text sequence.
 
         """
         self.height = height
-        self.markup = IAMDataset._read_markup(markup_dir)
+        self.c2i = c2i
+        self.max_len = max_len + 1  # +1 for <eos>
 
         # read images from split only
         with open(split_filepath, 'r') as f:
@@ -41,6 +49,8 @@ class IAMDataset(Dataset):
 
         self.imgs_paths = [x for x in Path(images_dir).rglob('*.png')
                            if x.stem in names]
+
+        self.markup, self.lens = self._read_markup(markup_dir)
 
     def __len__(self):
         return len(self.imgs_paths)
@@ -64,22 +74,42 @@ class IAMDataset(Dataset):
 
         img = (torch.tensor(img).unsqueeze(0) / 255.0 - 0.5) * 2
 
-        text = self.markup[img_path.stem]
+        text = self.markup[idx]
+        length = self.lens[idx]
 
-        return img, text
+        return img, text, length
 
-    @staticmethod
-    def _read_markup(markup_dir):
-        markup = {}
+    def _read_markup(self, markup_dir):
+        # read markup from xml files
+        markup_dict = {}
         for xml_path in Path(markup_dir).rglob('*.xml'):
             lines = ET.parse(xml_path).getroot()[1]
             for line in lines:
                 line_id = line.attrib['id']
                 line_text = line.attrib['text']
 
-                markup[line_id] = line_text
+                # convert text to tensor with padding
+                line_tensor = torch.tensor([self.c2i[x] for x in line_text],
+                                           dtype=torch.int64)
+                line_len = len(line_tensor)
+                diff = self.max_len - line_len
+                line_tensor = F.pad(line_tensor,
+                                    (0, diff),
+                                    'constant',
+                                    self.c2i['<eos>'])
 
-        return markup
+                # +1 for <eos>
+                markup_dict[line_id] = [line_tensor,
+                                        torch.tensor(line_len + 1)]
+
+        # reorder markup according to images order
+        markup = []
+        lens = []
+        for img_path in self.imgs_paths:
+            markup.append(markup_dict[img_path.stem][0])
+            lens.append(markup_dict[img_path.stem][1])
+
+        return markup, lens
 
     def show_dataset(self, n_samples):
         assert n_samples < len(self), \
