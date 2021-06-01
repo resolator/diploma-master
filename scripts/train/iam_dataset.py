@@ -126,8 +126,18 @@ class IAMDataset(Dataset):
 
         return torch.stack(images), texts, lens
 
-    def tensor2text(self, tensor):
-        return ''.join([self.i2c[x] for x in tensor.detach().cpu().numpy()])
+    def tensor2text(self, tensor, numpy=False):
+        if not numpy:
+            tensor = tensor.detach().cpu().numpy()
+
+        if len(tensor.shape) == 1:
+            return ''.join([self.i2c[x] for x in tensor])
+        else:
+            strings = []
+            for sample in tensor:
+                strings.append(''.join([self.i2c[x] for x in sample]))
+
+            return strings
 
     def show_dataset(self, n_samples):
         assert n_samples < len(self), \
