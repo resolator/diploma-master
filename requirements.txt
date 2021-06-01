@@ -1,0 +1,12 @@
+torch
+torchvision
+numpy
+tqdm
+tornado
+tensorflow
+tensorboard
+configargparse
+opencv-contrib-python
+pybind11
+fastwer
+timm
