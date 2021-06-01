@@ -9,9 +9,11 @@ import numpy as np
 from tqdm import tqdm
 from pathlib import Path
 from pprint import pprint
-from iam_dataset import IAMDataset
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
+
+from iam_dataset import IAMDataset
+from baseline_net import BaselineNet
 
 
 def get_args():
@@ -41,6 +43,8 @@ def get_args():
                         help='Learning rate.')
     parser.add_argument('--workers', type=int, default=2,
                         help='Number of data loader workers.')
+    parser.add_argument('--height', type=int, default=64,
+                        help='Input image height. Will resize to this value.')
 
     parser.add_argument('--save-to', type=Path,
                         help='Path to save dir.')
@@ -48,8 +52,19 @@ def get_args():
     return parser.parse_args()
 
 
-def create_model():
-    return 0
+def create_model(height=64,
+                 enc_hidden_size=256,
+                 enc_num_layers=3,
+                 enc_bidirectional=True,
+                 emb_size=64):
+    """Wrapper for creating different models."""
+    model = BaselineNet(height=height,
+                        enc_hidden_size=enc_hidden_size,
+                        enc_num_layers=enc_num_layers,
+                        enc_bidirectional=enc_bidirectional,
+                        emb_size=emb_size)
+
+    return model
 
 
 def save_model(model, optim, args, ep, metrics, best_metrics, models_dir):
@@ -58,29 +73,23 @@ def save_model(model, optim, args, ep, metrics, best_metrics, models_dir):
                  'optim': optim.state_dict(),
                  'args': args,
                  'epoch': ep,
-                 'valid_metrics': metrics}
+                 'valid_metrics': metrics,
+                 'i2c': model.i2c}
 
-    for stage in ['train', 'valid']:
-        # save by loss
-        if metrics['loss'][stage] <= best_metrics['loss'][stage]:
-            model_path = models_dir.joinpath(stage + 'loss.pth')
-            torch.save(save_data, model_path)
-            best_metrics['loss'][stage] = metrics['loss'][stage]
+    for m in metrics.keys():
+        for stage in ['train', 'valid']:
+            if metrics[m][stage] < best_metrics[m][stage]:
+                model_path = models_dir.joinpath(stage + '-' + m + '.pth')
+                torch.save(save_data, model_path)
+                best_metrics[m][stage] = metrics[m][stage]
 
-            print(f'Saved {stage} loss')
-
-        # save by acc
-        if metrics['acc'][stage] >= best_metrics['acc'][stage]:
-            model_path = models_dir.joinpath(stage + 'acc.pth')
-            torch.save(save_data, model_path)
-            best_metrics['acc'][stage] = metrics['acc'][stage]
-
-            print(f'Saved {stage} acc')
+                print(f'Saved {stage} {m}')
 
 
-def epoch_step(model, loaders, device, loss_fn, optim):
-    metrics = {'acc': {'train': 0.0, 'valid': 0.0},
-               'loss': {'train': 0.0, 'valid': 0.0}}
+def epoch_step(model, loaders, device, optim):
+    metrics = {'cer': {'train': 0.0, 'valid': 0.0},
+               'wer': {'train': 0.0, 'valid': 0.0},
+               'ctc_loss': {'train': 0.0, 'valid': 0.0}}
 
     for stage in ['train', 'valid']:
         is_train = stage == 'train'
@@ -88,27 +97,28 @@ def epoch_step(model, loaders, device, loss_fn, optim):
         loader_size = len(loaders[stage])
 
         torch.set_grad_enabled(is_train)
-        for imgs, lbls in tqdm(loaders[stage], desc=stage):
+        for img, text, lens in tqdm(loaders[stage], desc=stage):
             if is_train:
                 optim.zero_grad()
 
             # forward
-            imgs, lbls = imgs.to(device), lbls.to(device)
-            preds = model(imgs)
+            img, text, lens = img.to(device), text.to(device), lens.to(device)
+            probs, preds = model(img)
 
             # loss
-            loss = loss_fn(preds, lbls)
-            metrics['loss'][stage] += loss.item() / loader_size
-
-            # accuracy
-            lbls_pred = preds.max(dim=1)[1]
-            acc = np.sum(lbls_pred == lbls, dtype=float) / len(lbls)
-            metrics['acc'][stage] += acc.item() / loader_size
+            loss = model.calc_loss(probs, text, lens, preds)
+            metrics['ctc_loss'][stage] += loss.item() / loader_size
 
             # backward
             if is_train:
                 loss.backward()
                 optim.step()
+                for gt_sample, pd_sample in zip(text, preds.permute(1, 0)):
+                    gt_text = loaders[stage].dataset.tensor2text(gt_sample)
+                    pd_text = loaders[stage].dataset.tensor2text(pd_sample)
+                    print('\nGT:', gt_text)
+                    print('PD:', pd_text)
+                    break
 
     return metrics
 
@@ -126,35 +136,39 @@ def main():
 
     writer = SummaryWriter(logs_dir)
 
-    # datasets
-    common_args = {'images_dir': args.images_dir,
-                   'markup_filepath': args.mkp_dir,
-                   'height': args.height}
-    ds_train = IAMDataset(split_filepath=args.train_split, **common_args)
-    ds_valid = IAMDataset(split_filepath=args.valid_split, **common_args)
-
-    loaders = {
-        'train': DataLoader(ds_train, args.bs, True, num_workers=args.workers),
-        'valid': DataLoader(ds_valid, args.bs, num_workers=args.workers)
-    }
-
     # model
     device = torch.device('cpu')
     if torch.cuda.is_available():
         device = torch.device('cuda')
 
-    model = create_model().do(device)
+    model = create_model(height=args.height).to(device)
     optim = torch.optim.Adam(params=model.parameters(), lr=args.lr)
-    loss_fn = torch.nn.CrossEntropyLoss()
+
+    # datasets
+    ds_args = {'images_dir': args.images_dir,
+               'markup_dir': args.mkp_dir,
+               'height': args.height,
+               'c2i': model.c2i}
+    ds_train = IAMDataset(split_filepath=args.train_split, **ds_args)
+    ds_valid = IAMDataset(split_filepath=args.valid_split, **ds_args)
+
+    dl_args = {'batch_size': args.bs,
+               'num_workers': args.workers,
+               'collate_fn': IAMDataset.collate_fn}
+    loaders = {
+        'train': DataLoader(ds_train, shuffle=True, **dl_args),
+        'valid': DataLoader(ds_valid, **dl_args)
+    }
 
     # model saving initialization
-    best_metrics = {'acc': {'train': 0.0, 'valid': 0.0},
-                    'loss': {'train': np.inf, 'valid': np.inf}}
+    best_metrics = {'cer': {'train': np.inf, 'valid': np.inf},
+                    'wer': {'train': np.inf, 'valid': np.inf},
+                    'ctc_loss': {'train': np.inf, 'valid': np.inf}}
 
     ep = 1
     while ep != args.epochs + 1:
         print(f'\nEpoch #{ep}')
-        metrics = epoch_step(model, loaders, device, loss_fn, optim)
+        metrics = epoch_step(model, loaders, device, optim)
 
         # dump metrics
         for m_name, m_values in metrics.items():
