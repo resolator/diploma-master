@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*
 """Training launcher."""
 import torch
+import fastwer
 import configargparse
 
 import numpy as np
@@ -86,9 +87,15 @@ def save_model(model, optim, args, ep, metrics, best_metrics, models_dir):
                 print(f'Saved {stage} {m}')
 
 
+def calc_cer(gt, pd, gt_lens, pd_lens):
+    gt = [x[:y] for x, y in zip(gt, gt_lens)]
+    pd = [x[:y] for x, y in zip(pd, pd_lens)]
+
+    return fastwer.score(pd, gt, char_level=True)
+
+
 def epoch_step(model, loaders, device, optim):
     metrics = {'cer': {'train': 0.0, 'valid': 0.0},
-               'wer': {'train': 0.0, 'valid': 0.0},
                'ctc_loss': {'train': 0.0, 'valid': 0.0}}
 
     for stage in ['train', 'valid']:
@@ -109,16 +116,30 @@ def epoch_step(model, loaders, device, optim):
             loss = model.calc_loss(probs, text, lens, preds)
             metrics['ctc_loss'][stage] += loss.item() / loader_size
 
+            # cer
+            gt_lens = lens.detach().cpu().numpy()
+            pd_lens = model.calc_preds_lens(preds)
+
+            gt_text = loaders[stage].dataset.tensor2text(text)
+            pd_text = model.decode_ctc_beam_search(probs, preds)
+            pd_text = loaders[stage].dataset.tensor2text(pd_text, True)
+            cer = calc_cer(gt_text, pd_text, gt_lens, pd_lens)
+            metrics['cer'][stage] += cer / loader_size
+
             # backward
             if is_train:
                 loss.backward()
                 optim.step()
-                for gt_sample, pd_sample in zip(text, preds.permute(1, 0)):
-                    gt_text = loaders[stage].dataset.tensor2text(gt_sample)
-                    pd_text = loaders[stage].dataset.tensor2text(pd_sample)
-                    print('\nGT:', gt_text)
-                    print('PD:', pd_text)
-                    break
+                # for gt_sample, pd_sample, l in zip(text, preds.permute(1, 0), lens):
+                #     gt_text = loaders[stage].dataset.tensor2text(gt_sample)[:l]
+                #     pd_text = loaders[stage].dataset.tensor2text(pd_sample)
+                #     pd_beam = model.decode_ctc_beam_search(probs, preds)
+                #     pd_beam = loaders[stage].dataset.tensor2text(pd_beam, True)
+                #
+                #     print('\nGT:', gt_text)
+                #     print('PD:', pd_text)
+                #     print('PD beam:', pd_beam)
+                #     break
 
     return metrics
 
@@ -162,7 +183,6 @@ def main():
 
     # model saving initialization
     best_metrics = {'cer': {'train': np.inf, 'valid': np.inf},
-                    'wer': {'train': np.inf, 'valid': np.inf},
                     'ctc_loss': {'train': np.inf, 'valid': np.inf}}
 
     ep = 1
