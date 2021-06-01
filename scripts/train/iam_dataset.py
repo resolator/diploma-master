@@ -41,6 +41,8 @@ class IAMDataset(Dataset):
         """
         self.height = height
         self.c2i = c2i
+        self.i2c = [x[0] for x in sorted(self.c2i.items(), key=lambda x: x[1])]
+
         self.max_len = max_len + 1  # +1 for <eos>
 
         # read images from split only
@@ -111,6 +113,22 @@ class IAMDataset(Dataset):
 
         return markup, lens
 
+    @staticmethod
+    def collate_fn(batch, pad_value=1):
+        texts = torch.stack([x[1] for x in batch])
+        lens = torch.stack([x[2] for x in batch])
+
+        images = [x[0] for x in batch]
+        widths = [x.size(2) for x in images]
+        max_width = torch.max(torch.tensor(widths)).long()
+        images = [F.pad(x, (0, max_width - x.size(2)), 'constant', pad_value)
+                  for x in images]
+
+        return torch.stack(images), texts, lens
+
+    def tensor2text(self, tensor):
+        return ''.join([self.i2c[x] for x in tensor.detach().cpu().numpy()])
+
     def show_dataset(self, n_samples):
         assert n_samples < len(self), \
             f'dataset size is {len(self)}, however ' \
@@ -118,9 +136,10 @@ class IAMDataset(Dataset):
 
         cv2.namedWindow('img', cv2.WINDOW_NORMAL)
         for i in range(n_samples):
-            img, text = self[i]
+            img, text, lens = self.collate_fn([self[i]])
             img = ((img.squeeze() / 2 + 0.5) * 255).numpy().astype(np.uint8)
-            print(text)
+
+            print(self.tensor2text(text[0][:lens[0]]))
 
             cv2.imshow('img', img)
             cv2.waitKey()
