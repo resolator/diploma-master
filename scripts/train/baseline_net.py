@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*
 """Baseline net."""
+import timm
 import torch
+
 import numpy as np
 import torch.nn.functional as F
+import tensorflow as tf
+
 from torch import nn
 from string import digits, ascii_letters
 
@@ -32,7 +36,7 @@ class BaselineNet(nn.Module):
                                         sos_idx=self.c2i['<sos>'],
                                         eos_idx=self.c2i['<eos>'],
                                         max_len=self.max_len)
-        self.ctc_loss = nn.CTCLoss(blank=self.c2i['<blank>'])
+        self.ctc_loss = nn.CTCLoss(self.c2i['<b>'], 'mean', True)
 
     def forward(self, x):
         x = self.fe(x)
@@ -41,19 +45,12 @@ class BaselineNet(nn.Module):
 
         return decoded
 
-    def calc_loss(self, log_probs, targets, targets_lens, preds):
-        preds = preds.permute(1, 0)
-        preds_lens = [self.max_len] * targets.size(0)
-        last_sample = -1
-        for sample, idx in torch.nonzero(preds == self.c2i['<eos>']):
-            if sample != last_sample:
-                last_sample = sample
-                preds_lens[sample] = idx
-        preds_lens = torch.tensor(preds_lens,
-                                  dtype=torch.int64,
-                                  device=log_probs.device)
+    def calc_loss(self, probs, targets, targets_lens, preds):
+        probs = torch.log(probs)
+        preds_lens = torch.from_numpy(self.calc_preds_lens(preds)).to(
+            probs.device)
 
-        return self.ctc_loss(log_probs, targets, preds_lens, targets_lens)
+        return self.ctc_loss(probs, targets, preds_lens, targets_lens)
 
     @torch.no_grad()
     def _get_encoder_input_size(self, height):
@@ -64,35 +61,75 @@ class BaselineNet(nn.Module):
 
     @staticmethod
     def _build_alphabet():
-        symbs = ['<blank>', '<sos>', '<eos>', ' ', '!', '"', '#', '&', '\'',
+        symbs = ['<b>', '<sos>', '<eos>', ' ', '!', '"', '#', '&', '\'',
                  '(', ')', '*', '+', ',', '-', '.', '/', ':', ';', '?']
         i2c = symbs + list(digits) + list(ascii_letters)
         c2i = {c: idx for idx, c in enumerate(i2c)}
 
         return c2i, i2c
 
+    def calc_preds_lens(self, preds):
+        """Calculate lengths of predicted lines.
+
+        Parameters
+        ----------
+        preds : torch.Tensor
+            Tensor of size (seq_len, bs).
+
+        Returns
+        -------
+        numpy.ndarray
+            Array of (bs,) size with lengths.
+
+        """
+        preds = preds.permute(1, 0)  # bs, seq_len
+        bs = preds.size(0)
+        preds_lens = [self.max_len] * bs
+        last_sample = -1
+        for sample, idx in torch.nonzero(preds == self.c2i['<eos>']):
+            if sample != last_sample:
+                last_sample = sample
+                preds_lens[sample] = idx
+
+        return np.array(preds_lens, dtype=np.int64)
+
+    @torch.no_grad()
+    def decode_ctc_beam_search(self, probs, preds, beam_width=15):
+        probs = probs.detach().cpu().numpy()
+        lens = self.calc_preds_lens(preds)
+        decoded, _ = tf.nn.ctc_beam_search_decoder(probs, lens, beam_width, 1)
+
+        return decoded[0].values.numpy()
+
 
 # dont forget about FPN
 class FeatureExtractor(nn.Module):
-    def __init__(self):
+    def __init__(self, resnet=False):
         super().__init__()
-        self.fe = nn.Sequential(
-            nn.Conv2d(1, 8, (6, 4), (3, 2)),  # to fit 64-height images
-            nn.BatchNorm2d(8),
-            nn.LeakyReLU(),
-            nn.Conv2d(8, 32, (6, 4), (1, 1)),
-            nn.BatchNorm2d(32),
-            nn.LeakyReLU(),
-            nn.MaxPool2d((4, 2), (4, 2)),
-            nn.Conv2d(32, 64, (3, 3), (1, 1)),
-            nn.BatchNorm2d(64),
-            nn.LeakyReLU(),
-            nn.MaxPool2d((1, 2), (1, 2))
-        )
+        if resnet:
+            self.fe = timm.create_model('resnet18',
+                                        num_classes=0,
+                                        global_pool='',
+                                        in_chans=1,
+                                        pretrained=True)
+        else:
+            self.fe = nn.Sequential(
+                nn.Conv2d(1, 8, (6, 4), (3, 2)),  # to fit 64-height images
+                nn.BatchNorm2d(8),
+                nn.LeakyReLU(),
+                nn.Conv2d(8, 32, (6, 4), (1, 1)),
+                nn.BatchNorm2d(32),
+                nn.LeakyReLU(),
+                nn.MaxPool2d((4, 2), (4, 2)),
+                nn.Conv2d(32, 64, (3, 3), (1, 1)),
+                nn.BatchNorm2d(64),
+                nn.LeakyReLU(),
+                nn.MaxPool2d((1, 2), (1, 2))
+            )
 
     def forward(self, x):
         y = self.fe(x)
-        return y.squeeze(2)
+        return torch.mean(y, dim=2).squeeze(2)
 
 
 class Encoder(nn.Module):
@@ -189,7 +226,8 @@ class AttentionDecoder(nn.Module):
         bs = seq.size(1)
         probs, preds = [], []
         h, c = self.init_hidden(bs, seq.dtype, seq.device)
-        a = torch.zeros(bs, self.emb_size, device=seq.device)
+        att_weights = self.att(embedded, h.squeeze(0))  # bs, width, v_size
+        a = torch.sum(embedded * att_weights, dim=1)  # bs, emb_size
         y = self.emb(torch.ones(bs,
                                 dtype=torch.int64,
                                 device=seq.device) * self.sos_idx)  # <sos>
@@ -204,7 +242,7 @@ class AttentionDecoder(nn.Module):
             # calc probs
             y = self.fc(y.squeeze(0))  # bs, alphabet_size
             prob = F.softmax(y, dim=1)
-            probs.append(torch.log(prob))  # for CTCLoss
+            probs.append(prob)
 
             # check end of prediction
             pred = torch.argmax(prob, dim=1)
