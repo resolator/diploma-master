@@ -203,6 +203,7 @@ def main():
 
         # save best models and update best metrics
         save_model(model, optim, args, ep, metrics, best_metrics, models_dir)
+        writer.flush()
 
         ep += 1
 
