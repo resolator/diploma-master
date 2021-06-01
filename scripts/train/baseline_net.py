@@ -49,7 +49,9 @@ class BaselineNet(nn.Module):
             if sample != last_sample:
                 last_sample = sample
                 preds_lens[sample] = idx
-        preds_lens = torch.tensor(preds_lens, dtype=torch.int64)
+        preds_lens = torch.tensor(preds_lens,
+                                  dtype=torch.int64,
+                                  device=log_probs.device)
 
         return self.ctc_loss(log_probs, targets, preds_lens, targets_lens)
 
@@ -76,11 +78,14 @@ class FeatureExtractor(nn.Module):
         super().__init__()
         self.fe = nn.Sequential(
             nn.Conv2d(1, 8, (6, 4), (3, 2)),  # to fit 64-height images
+            nn.BatchNorm2d(8),
             nn.LeakyReLU(),
             nn.Conv2d(8, 32, (6, 4), (1, 1)),
+            nn.BatchNorm2d(32),
             nn.LeakyReLU(),
             nn.MaxPool2d((4, 2), (4, 2)),
             nn.Conv2d(32, 64, (3, 3), (1, 1)),
+            nn.BatchNorm2d(64),
             nn.LeakyReLU(),
             nn.MaxPool2d((1, 2), (1, 2))
         )
@@ -96,7 +101,7 @@ class Encoder(nn.Module):
                  hidden_size=256,
                  num_layers=3,
                  bidirectional=True,
-                 dropout=0.5,
+                 dropout=0.1,
                  out_channels=81):
         super().__init__()
         self.num_layers = num_layers
@@ -151,7 +156,7 @@ class AttentionDecoder(nn.Module):
                  enc_hidden_size=81,
                  emb_size=64,
                  hidden_size=256,
-                 dropout=0.5,
+                 dropout=0.1,
                  sos_idx=1,
                  eos_idx=2,
                  max_len=150):
@@ -184,8 +189,10 @@ class AttentionDecoder(nn.Module):
         bs = seq.size(1)
         probs, preds = [], []
         h, c = self.init_hidden(bs, seq.dtype, seq.device)
-        a = torch.zeros(bs, self.emb_size)
-        y = self.emb(torch.ones(bs, dtype=torch.int64) * self.sos_idx)  # <sos>
+        a = torch.zeros(bs, self.emb_size, device=seq.device)
+        y = self.emb(torch.ones(bs,
+                                dtype=torch.int64,
+                                device=seq.device) * self.sos_idx)  # <sos>
         for i in range(self.max_len):
             y = torch.cat([y, a], dim=1)  # bs, emb_size * 2
             y, (h, c) = self.lstm(y.unsqueeze(0), (h, c))
@@ -195,7 +202,7 @@ class AttentionDecoder(nn.Module):
             a = torch.sum(embedded * att_weights, dim=1)  # bs, emb_size
 
             # calc probs
-            y = self.fc(y.squeeze())  # bs, alphabet_size
+            y = self.fc(y.squeeze(0))  # bs, alphabet_size
             prob = F.softmax(y, dim=1)
             probs.append(torch.log(prob))  # for CTCLoss
 
@@ -238,11 +245,11 @@ class AttentionBahdanau(nn.Module):
         summed = (weighted_enc + weighted_dec).permute(1, 0, 2)
         energy = self.v(torch.tanh(summed))
 
-        return torch.softmax(energy, dim=1)
+        return F.softmax(energy, dim=1)
 
 
 class PositionalEncoder(nn.Module):
-    def __init__(self, d_model, max_len=150):
+    def __init__(self, d_model, max_len=1000):
         super().__init__()
 
         pe = torch.zeros(max_len, d_model)
