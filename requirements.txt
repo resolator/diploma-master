@@ -1,3 +1,4 @@
+pybind11
 torch
 torchvision
 numpy
@@ -7,6 +8,5 @@ tensorflow
 tensorboard
 configargparse
 opencv-contrib-python
-pybind11
 fastwer
 timm
