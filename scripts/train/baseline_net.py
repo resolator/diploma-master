@@ -64,6 +64,27 @@ class BaselineNet(nn.Module):
 
         return c2i, i2c
 
+    def calc_preds_lens(self, preds):
+        """Calculate lengths of predicted lines.
+        Parameters
+        ----------
+        preds : torch.Tensor
+            Tensor of size (seq_len, bs).
+        Returns
+        -------
+        numpy.ndarray
+            Array of (bs,) size with lengths.
+        """
+        bs = preds.size(0)
+        preds_lens = [self.max_len] * bs
+        last_sample = -1
+        for sample, idx in torch.nonzero(preds == self.c2i['<eos>']):
+            if sample != last_sample:
+                last_sample = sample
+                preds_lens[sample] = idx + 1
+
+        return np.array(preds_lens, dtype=np.int64)
+
 
 # dont forget about FPN
 class FeatureExtractor(nn.Module):
@@ -158,9 +179,13 @@ class AttentionDecoder(nn.Module):
         encoded = self.emb(enc_out)  # BS, W, HS
         # encoded = self.pe(encoded)  # BS, W, HS
 
+        assert encoded.size(1) < self.max_len,\
+            f'got {encoded.size(1)} size of encoder out, ' \
+            f'but maximal is {self.max_len}'
+
         pad_tensor = torch.zeros(encoded.size(0),
                                  self.max_len - encoded.size(1),
-                                 encoded.size(2))
+                                 encoded.size(2)).to(enc_out.device)
         padded_enc_out = torch.cat([encoded, pad_tensor], dim=1)
 
         seq = encoded.permute(1, 0, 2)  # seq_len(W), BS, HS
@@ -196,10 +221,11 @@ class AttentionDecoder(nn.Module):
 
             # use targets as the next input?
             if target_seq is not None:
-                loss += self.criterion(logits, target_seq[i])
+                current_y = target_seq[:, i]
+                loss += self.criterion(logits, current_y)
 
                 if teacher:
-                    x_dec = target_seq[i]  # BS
+                    x_dec = current_y  # BS
                 else:
                     x_dec = torch.argmax(logits, dim=1)  # BS
 
@@ -207,7 +233,7 @@ class AttentionDecoder(nn.Module):
             if (x_dec == self.eos_idx).sum() == x_dec.shape[0]:
                 break
 
-        return torch.stack(seq_logits), loss  # seq_len(W), BS, OS
+        return torch.stack(seq_logits).permute(1, 0, 2), loss  # BS, W, OS
 
     def init_hidden(self, bs, device):
         h_zeros = torch.zeros(bs, self.hidden_size,

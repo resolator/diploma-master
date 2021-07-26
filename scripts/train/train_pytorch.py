@@ -54,16 +54,20 @@ def get_args():
 
 
 def create_model(height=64,
-                 enc_hidden_size=256,
-                 enc_num_layers=3,
+                 enc_hs=256,
+                 dec_hs=256,
+                 enc_n_layers=3,
                  enc_bidirectional=True,
-                 emb_size=64):
+                 max_len=300,
+                 teacher_ratio=0.5):
     """Wrapper for creating different models."""
     model = BaselineNet(height=height,
-                        enc_hidden_size=enc_hidden_size,
-                        enc_num_layers=enc_num_layers,
+                        enc_hs=enc_hs,
+                        dec_hs=dec_hs,
+                        enc_n_layers=enc_n_layers,
                         enc_bidirectional=enc_bidirectional,
-                        emb_size=emb_size)
+                        max_len=max_len,
+                        teacher_ratio=teacher_ratio)
 
     return model
 
@@ -96,7 +100,7 @@ def calc_cer(gt, pd, gt_lens, pd_lens):
 
 def epoch_step(model, loaders, device, optim):
     metrics = {'cer': {'train': 0.0, 'valid': 0.0},
-               'ctc_loss': {'train': 0.0, 'valid': 0.0}}
+               'loss': {'train': 0.0, 'valid': 0.0}}
 
     for stage in ['train', 'valid']:
         is_train = stage == 'train'
@@ -110,19 +114,18 @@ def epoch_step(model, loaders, device, optim):
 
             # forward
             img, text, lens = img.to(device), text.to(device), lens.to(device)
-            probs, preds = model(img)
-
-            # loss
-            loss = model.calc_loss(probs, text, lens, preds)
-            metrics['ctc_loss'][stage] += loss.item() / loader_size
+            logits, loss = model(img, text)
+            metrics['loss'][stage] += loss.item() / loader_size
 
             # cer
+            preds = torch.argmax(logits, dim=2)
+
             gt_lens = lens.detach().cpu().numpy()
             pd_lens = model.calc_preds_lens(preds)
 
             gt_text = loaders[stage].dataset.tensor2text(text)
-            pd_text = model.decode_ctc_beam_search(probs, preds)
-            pd_text = loaders[stage].dataset.tensor2text(pd_text, True)
+            pd_text = loaders[stage].dataset.tensor2text(preds)
+
             cer = calc_cer(gt_text, pd_text, gt_lens, pd_lens)
             metrics['cer'][stage] += cer / loader_size
 
@@ -130,16 +133,6 @@ def epoch_step(model, loaders, device, optim):
             if is_train:
                 loss.backward()
                 optim.step()
-                # for gt_sample, pd_sample, l in zip(text, preds.permute(1, 0), lens):
-                #     gt_text = loaders[stage].dataset.tensor2text(gt_sample)[:l]
-                #     pd_text = loaders[stage].dataset.tensor2text(pd_sample)
-                #     pd_beam = model.decode_ctc_beam_search(probs, preds)
-                #     pd_beam = loaders[stage].dataset.tensor2text(pd_beam, True)
-                #
-                #     print('\nGT:', gt_text)
-                #     print('PD:', pd_text)
-                #     print('PD beam:', pd_beam)
-                #     break
 
     return metrics
 
@@ -162,14 +155,16 @@ def main():
     if torch.cuda.is_available():
         device = torch.device('cuda')
 
-    model = create_model(height=args.height).to(device)
+    max_len = 320
+    model = create_model(height=args.height, max_len=max_len).to(device)
     optim = torch.optim.Adam(params=model.parameters(), lr=args.lr)
 
     # datasets
     ds_args = {'images_dir': args.images_dir,
                'markup_dir': args.mkp_dir,
                'height': args.height,
-               'c2i': model.c2i}
+               'c2i': model.c2i,
+               'max_len': max_len}
     ds_train = IAMDataset(split_filepath=args.train_split, **ds_args)
     ds_valid = IAMDataset(split_filepath=args.valid_split, **ds_args)
 
@@ -183,7 +178,7 @@ def main():
 
     # model saving initialization
     best_metrics = {'cer': {'train': np.inf, 'valid': np.inf},
-                    'ctc_loss': {'train': np.inf, 'valid': np.inf}}
+                    'loss': {'train': np.inf, 'valid': np.inf}}
 
     ep = 1
     while ep != args.epochs + 1:

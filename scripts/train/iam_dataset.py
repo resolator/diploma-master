@@ -19,8 +19,8 @@ class IAMDataset(Dataset):
                  markup_dir,
                  split_filepath,
                  c2i,
-                 height=119,
-                 max_len=127):
+                 height=64,
+                 max_len=300):
         """Initialize IAM dataset.
 
         Parameters
@@ -43,7 +43,7 @@ class IAMDataset(Dataset):
         self.c2i = c2i
         self.i2c = [x[0] for x in sorted(self.c2i.items(), key=lambda x: x[1])]
 
-        self.max_len = max_len + 1  # +1 for <eos>
+        self.max_len = max_len
 
         # read images from split only
         with open(split_filepath, 'r') as f:
