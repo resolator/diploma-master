@@ -34,8 +34,8 @@ class BaselineNet(nn.Module):
                                output_size=enc_output_size)
         self.decoder = AttentionDecoder(enc_os=enc_output_size,
                                         hidden_size=dec_hs,
-                                        sos_idx=self.c2i['<sos>'],
-                                        eos_idx=self.c2i['<eos>'],
+                                        sos_idx=self.c2i['ś'],
+                                        eos_idx=self.c2i['é'],
                                         max_len=self.max_len)
 
     def forward(self, x, target_seq=None):
@@ -57,7 +57,7 @@ class BaselineNet(nn.Module):
 
     @staticmethod
     def _build_alphabet():
-        symbs = ['<b>', '<sos>', '<eos>', ' ', '!', '"', '#', '&', '\'',
+        symbs = ['ƀ', 'ś', 'é', ' ', '!', '"', '#', '&', '\'',
                  '(', ')', '*', '+', ',', '-', '.', '/', ':', ';', '?']
         i2c = symbs + list(digits) + list(ascii_letters)
         c2i = {c: idx for idx, c in enumerate(i2c)}
@@ -78,7 +78,7 @@ class BaselineNet(nn.Module):
         bs = preds.size(0)
         preds_lens = [self.max_len] * bs
         last_sample = -1
-        for sample, idx in torch.nonzero(preds == self.c2i['<eos>']):
+        for sample, idx in torch.nonzero(preds == self.c2i['é']):
             if sample != last_sample:
                 last_sample = sample
                 preds_lens[sample] = idx + 1
@@ -161,7 +161,7 @@ class AttentionDecoder(nn.Module):
         self.max_len = max_len
 
         self.hidden_size = hidden_size
-        self.criterion = nn.CrossEntropyLoss()
+        self.criterion = nn.CrossEntropyLoss(reduction='none')
 
         self.emb = nn.Embedding(enc_os, self.hidden_size)
         self.pe = PositionalEncoder(self.hidden_size)
@@ -177,7 +177,7 @@ class AttentionDecoder(nn.Module):
 
     def forward(self, enc_out, target_seq=None, teacher=False):
         encoded = self.emb(enc_out)  # BS, W, HS
-        # encoded = self.pe(encoded)  # BS, W, HS
+        encoded = self.pe(encoded)  # BS, W, HS
 
         assert encoded.size(1) < self.max_len,\
             f'got {encoded.size(1)} size of encoder out, ' \
@@ -199,7 +199,7 @@ class AttentionDecoder(nn.Module):
         ) * self.sos_idx  # BS (<sos>)
 
         seq_logits = []
-        loss = 0.0
+        losses = torch.tensor([], device=x_dec.device)
         for i in range(self.max_len):
             x_emb = self.emb(x_dec)  # BS, HS
             x_emb = self.dropout(x_emb)
@@ -222,9 +222,10 @@ class AttentionDecoder(nn.Module):
             # use targets as the next input?
             if target_seq is not None:
                 current_y = target_seq[:, i]
-                loss += self.criterion(logits, current_y)
+                cur_losses = self.criterion(logits, current_y).flatten()
+                losses = torch.cat([losses, cur_losses])
 
-                if teacher:
+                if teacher and self.training:
                     x_dec = current_y  # BS
                 else:
                     x_dec = torch.argmax(logits, dim=1)  # BS
@@ -232,6 +233,8 @@ class AttentionDecoder(nn.Module):
             # ended sequence?
             if (x_dec == self.eos_idx).sum() == x_dec.shape[0]:
                 break
+
+        loss = torch.mean(losses)  # average loss
 
         return torch.stack(seq_logits).permute(1, 0, 2), loss  # BS, W, OS
 

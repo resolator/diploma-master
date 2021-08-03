@@ -98,7 +98,7 @@ class IAMDataset(Dataset):
                 line_tensor = F.pad(line_tensor,
                                     (0, diff),
                                     'constant',
-                                    self.c2i['<eos>'])
+                                    self.c2i['é'])
 
                 # +1 for <eos>
                 markup_dict[line_id] = [line_tensor,
