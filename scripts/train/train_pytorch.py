@@ -91,9 +91,10 @@ def save_model(model, optim, args, ep, metrics, best_metrics, models_dir):
                 print(f'Saved {stage} {m}')
 
 
-def calc_cer(gt, pd, gt_lens, pd_lens):
-    gt = [x[:y] for x, y in zip(gt, gt_lens)]
-    pd = [x[:y] for x, y in zip(pd, pd_lens)]
+def calc_cer(gt, pd, gt_lens=None):
+    if gt_lens is not None:
+        gt = [x[:y] for x, y in zip(gt, gt_lens)]
+        pd = [x[:y] for x, y in zip(pd, gt_lens)]
 
     return fastwer.score(pd, gt, char_level=True)
 
@@ -120,13 +121,10 @@ def epoch_step(model, loaders, device, optim):
             # cer
             preds = torch.argmax(logits, dim=2)
 
-            gt_lens = lens.detach().cpu().numpy()
-            pd_lens = model.calc_preds_lens(preds)
-
             gt_text = loaders[stage].dataset.tensor2text(text)
             pd_text = loaders[stage].dataset.tensor2text(preds)
 
-            cer = calc_cer(gt_text, pd_text, gt_lens, pd_lens)
+            cer = calc_cer(gt_text, pd_text, lens)
             metrics['cer'][stage] += cer / loader_size
 
             # backward
