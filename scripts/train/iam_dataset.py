@@ -5,6 +5,7 @@ import cv2
 import torch
 
 import numpy as np
+import albumentations as albu
 import torch.nn.functional as F
 
 from pathlib import Path
@@ -20,7 +21,8 @@ class IAMDataset(Dataset):
                  split_filepath,
                  c2i,
                  height=64,
-                 max_len=300):
+                 max_len=300,
+                 augment=False):
         """Initialize IAM dataset.
 
         Parameters
@@ -37,13 +39,16 @@ class IAMDataset(Dataset):
             Target height for images.
         max_len : int
             Maximal length for text sequence.
+        augment : bool
+            Auggment images.
 
         """
-        self.height = height
         self.c2i = c2i
-        self.i2c = [x[0] for x in sorted(self.c2i.items(), key=lambda x: x[1])]
-
+        self.height = height
         self.max_len = max_len
+        self.augment = augment
+
+        self.i2c = [x[0] for x in sorted(self.c2i.items(), key=lambda x: x[1])]
 
         # read images from split only
         with open(split_filepath, 'r') as f:
@@ -53,6 +58,25 @@ class IAMDataset(Dataset):
                            if x.stem in names]
 
         self.markup, self.lens = self._read_markup(markup_dir)
+
+        if self.augment:
+            self.transform = albu.Compose([
+                albu.CropAndPad([0, [15, 40], 0, [15, 40]], pad_cval=255),
+                albu.GaussianBlur(3, p=0.4),
+                albu.Affine(scale=[0.9, 1.0],
+                            shear={'x':[-9, 9]},
+                            cval=255,
+                            p=0.6),
+                albu.SmallestMaxSize(self.height),
+                albu.CLAHE(),
+                albu.Emboss(),
+                albu.RandomBrightnessContrast()
+            ])
+        else:
+            self.transform = albu.Compose([
+                albu.CropAndPad([0, 20, 0, 20], pad_cval=255),
+                albu.SmallestMaxSize(self.height)
+            ])
 
     def __len__(self):
         return len(self.imgs_paths)
@@ -72,9 +96,11 @@ class IAMDataset(Dataset):
     def __getitem__(self, idx):
         img_path = self.imgs_paths[idx]
         img = cv2.imread(str(img_path), cv2.IMREAD_GRAYSCALE)
-        img = self._resize(img, self.height)
 
-        img = (torch.tensor(img).unsqueeze(0) / 255.0 - 0.5) * 2
+        # img = self._resize(img, self.height)
+        img = self.transform(image=img)['image']
+
+        img = (torch.tensor(img).unsqueeze(0) / 255.0)
 
         text = self.markup[idx]
         length = self.lens[idx]
@@ -147,7 +173,7 @@ class IAMDataset(Dataset):
         cv2.namedWindow('img', cv2.WINDOW_NORMAL)
         for i in range(n_samples):
             img, text, lens = self.collate_fn([self[i]])
-            img = ((img.squeeze() / 2 + 0.5) * 255).numpy().astype(np.uint8)
+            img = (img.squeeze() * 255).numpy().astype(np.uint8)
 
             print(self.tensor2text(text[0][:lens[0]]))
 

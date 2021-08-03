@@ -46,6 +46,8 @@ def get_args():
                         help='Number of data loader workers.')
     parser.add_argument('--height', type=int, default=64,
                         help='Input image height. Will resize to this value.')
+    parser.add_argument('--augment', action='store_true',
+                        help='Auggment images.')
 
     parser.add_argument('--save-to', type=Path,
                         help='Path to save dir.')
@@ -163,7 +165,9 @@ def main():
                'height': args.height,
                'c2i': model.c2i,
                'max_len': max_len}
-    ds_train = IAMDataset(split_filepath=args.train_split, **ds_args)
+    ds_train = IAMDataset(split_filepath=args.train_split,
+                          augment=args.augment,
+                          **ds_args)
     ds_valid = IAMDataset(split_filepath=args.valid_split, **ds_args)
 
     dl_args = {'batch_size': args.bs,

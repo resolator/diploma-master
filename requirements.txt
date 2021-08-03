@@ -10,3 +10,4 @@ configargparse
 opencv-contrib-python
 fastwer
 timm
+albumentations

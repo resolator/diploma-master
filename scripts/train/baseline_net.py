@@ -26,7 +26,7 @@ class BaselineNet(nn.Module):
         self.c2i, self.i2c = BaselineNet._build_alphabet()
         enc_output_size = len(self.i2c)
 
-        self.fe = FeatureExtractor()
+        self.fe = FeatureExtractor(True)
         self.encoder = Encoder(input_size=self._get_encoder_input_size(height),
                                hidden_size=enc_hs,
                                num_layers=enc_n_layers,
@@ -91,7 +91,7 @@ class FeatureExtractor(nn.Module):
     def __init__(self, resnet=False):
         super().__init__()
         if resnet:
-            self.fe = timm.create_model('resnet18',
+            self.fe = timm.create_model('efficientnet_b0',
                                         num_classes=0,
                                         global_pool='',
                                         in_chans=1,
