@@ -14,7 +14,8 @@ from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 
 from iam_dataset import IAMDataset
-from baseline_net import BaselineNet
+from baseline_net_pytorch import BaselineNet
+from baseline_net_my import BaselineNet as MyBaselineNet
 
 
 def get_args():
@@ -60,9 +61,10 @@ def create_model(height=64,
                  dec_hs=256,
                  enc_n_layers=3,
                  enc_bidirectional=True,
-                 max_len=300,
-                 teacher_ratio=0.5):
+                 max_len=150,
+                 teacher_ratio=0.9):
     """Wrapper for creating different models."""
+    # model = MyBaselineNet(height=height,
     model = BaselineNet(height=height,
                         enc_hs=enc_hs,
                         dec_hs=dec_hs,
@@ -103,7 +105,9 @@ def calc_cer(gt, pd, gt_lens=None):
 
 def epoch_step(model, loaders, device, optim):
     metrics = {'cer': {'train': 0.0, 'valid': 0.0},
+               'cer_beam': {'train': 0.0, 'valid': 0.0},
                'loss': {'train': 0.0, 'valid': 0.0}}
+    my_baseline_net = False
 
     for stage in ['train', 'valid']:
         is_train = stage == 'train'
@@ -111,23 +115,47 @@ def epoch_step(model, loaders, device, optim):
         loader_size = len(loaders[stage])
 
         torch.set_grad_enabled(is_train)
-        for img, text, lens in tqdm(loaders[stage], desc=stage):
+        for i, (img, text, lens) in enumerate(tqdm(loaders[stage], desc=stage)):
             if is_train:
                 optim.zero_grad()
 
-            # forward
+            # old
             img, text, lens = img.to(device), text.to(device), lens.to(device)
-            logits, loss = model(img, text)
+
+            if my_baseline_net:
+                logits, preds = model(img, text, lens)
+                loss = model.calc_loss(logits, text, lens, preds, ce=True)
+            else:
+                logits, loss = model(img, text, lens)
+                preds = torch.argmax(logits.permute(1, 0, 2),
+                                     dim=-1).permute(1, 0)
+
+            # loss
             metrics['loss'][stage] += loss.item() / loader_size
 
             # cer
-            preds = torch.argmax(logits, dim=2)
-
             gt_text = loaders[stage].dataset.tensor2text(text)
-            pd_text = loaders[stage].dataset.tensor2text(preds)
+            pd_lens = model.calc_preds_lens(preds)
+            pd_beam = model.decode_ctc_beam_search(logits, pd_lens)
+            pd_beam = loaders[stage].dataset.tensor2text(pd_beam, True)
 
-            cer = calc_cer(gt_text, pd_text, lens)
+            gt_lens = lens.detach().cpu().numpy()
+            cer = calc_cer(gt_text, pd_beam, gt_lens)
+            metrics['cer_beam'][stage] += cer / loader_size
+
+            pd_text = loaders[stage].dataset.tensor2text(preds.permute(1, 0))
+            cer = calc_cer(gt_text, pd_text, gt_lens)
             metrics['cer'][stage] += cer / loader_size
+
+            # print
+            if i == 0:
+                gt_text = gt_text[0][:lens[0]]
+                pd_text = loaders[stage].dataset.tensor2text(preds[:, 0][:lens[0]])
+                pd_beam = pd_beam[0][:lens[0]]
+
+                print('\nGT:', gt_text)
+                print('PD:', pd_text)
+                print('PD beam:', pd_beam)
 
             # backward
             if is_train:
@@ -155,8 +183,8 @@ def main():
     if torch.cuda.is_available():
         device = torch.device('cuda')
 
-    max_len = 320
-    model = create_model(height=args.height, max_len=max_len).to(device)
+    text_max_len = 150
+    model = create_model(height=args.height, max_len=text_max_len).to(device)
     optim = torch.optim.Adam(params=model.parameters(), lr=args.lr)
 
     # datasets
@@ -164,7 +192,7 @@ def main():
                'markup_dir': args.mkp_dir,
                'height': args.height,
                'c2i': model.c2i,
-               'max_len': max_len}
+               'max_len': text_max_len}
     ds_train = IAMDataset(split_filepath=args.train_split,
                           augment=args.augment,
                           **ds_args)
@@ -180,6 +208,7 @@ def main():
 
     # model saving initialization
     best_metrics = {'cer': {'train': np.inf, 'valid': np.inf},
+                    'cer_beam': {'train': np.inf, 'valid': np.inf},
                     'loss': {'train': np.inf, 'valid': np.inf}}
 
     ep = 1
@@ -190,6 +219,10 @@ def main():
         # dump metrics
         for m_name, m_values in metrics.items():
             writer.add_scalars(m_name, m_values, ep)
+
+        # dump best metrics
+        for m_name, m_values in best_metrics.items():
+            writer.add_scalars('best_' + m_name, m_values, ep)
 
         # print metrics
         print('Current metrics:')

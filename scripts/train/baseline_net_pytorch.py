@@ -6,9 +6,10 @@ import torch
 
 import numpy as np
 import torch.nn.functional as F
+import tensorflow as tf
 
 from torch import nn
-from string import digits, ascii_letters
+from utils import build_alphabet
 
 
 class BaselineNet(nn.Module):
@@ -18,35 +19,35 @@ class BaselineNet(nn.Module):
                  dec_hs=256,
                  enc_n_layers=3,
                  enc_bidirectional=True,
-                 max_len=300,
+                 max_len=150,
                  teacher_ratio=0.5):
         super().__init__()
         self.max_len = max_len
-        self.teacher_ratio = teacher_ratio
-        self.c2i, self.i2c = BaselineNet._build_alphabet()
-        enc_output_size = len(self.i2c)
+        self.c2i, self.i2c = build_alphabet()
+        enc_out_channels = len(self.i2c)
 
-        self.fe = FeatureExtractor(True)
+        self.fe = FeatureExtractor()
         self.encoder = Encoder(input_size=self._get_encoder_input_size(height),
                                hidden_size=enc_hs,
                                num_layers=enc_n_layers,
                                bidirectional=enc_bidirectional,
-                               output_size=enc_output_size)
-        self.decoder = AttentionDecoder(enc_os=enc_output_size,
+                               out_channels=enc_out_channels)
+        self.decoder = AttentionDecoder(enc_hidden_size=enc_out_channels,
                                         hidden_size=dec_hs,
                                         sos_idx=self.c2i['ś'],
                                         eos_idx=self.c2i['é'],
-                                        max_len=self.max_len)
+                                        enc_max_len=320,
+                                        text_max_len=self.max_len,
+                                        teacher_ratio=teacher_ratio)
 
-    def forward(self, x, target_seq=None):
+    def forward(self, x, target_seq=None, target_lens=None):
         x = self.fe(x)
-        enc_out = self.encoder(x)
-        teacher = np.random.random() < self.teacher_ratio
-        logits, loss = self.decoder(enc_out,
-                                    target_seq=target_seq,
-                                    teacher=teacher)
+        h = self.encoder(x)
+        decoded = self.decoder(h,
+                               target_seq=target_seq,
+                               target_lens=target_lens)
 
-        return logits, loss
+        return decoded
 
     @torch.no_grad()
     def _get_encoder_input_size(self, height):
@@ -55,35 +56,46 @@ class BaselineNet(nn.Module):
 
         return y.shape[1]
 
-    @staticmethod
-    def _build_alphabet():
-        symbs = ['ƀ', 'ś', 'é', ' ', '!', '"', '#', '&', '\'',
-                 '(', ')', '*', '+', ',', '-', '.', '/', ':', ';', '?']
-        i2c = symbs + list(digits) + list(ascii_letters)
-        c2i = {c: idx for idx, c in enumerate(i2c)}
-
-        return c2i, i2c
-
     def calc_preds_lens(self, preds):
         """Calculate lengths of predicted lines.
+
         Parameters
         ----------
         preds : torch.Tensor
             Tensor of size (seq_len, bs).
+
         Returns
         -------
         numpy.ndarray
             Array of (bs,) size with lengths.
+
         """
+        preds = preds.permute(1, 0)  # bs, seq_len
         bs = preds.size(0)
         preds_lens = [self.max_len] * bs
         last_sample = -1
         for sample, idx in torch.nonzero(preds == self.c2i['é']):
             if sample != last_sample:
                 last_sample = sample
-                preds_lens[sample] = idx + 1
+                preds_lens[sample] = idx
 
         return np.array(preds_lens, dtype=np.int64)
+
+    @torch.no_grad()
+    def decode_ctc_beam_search(self, logits, lens, beam_width=16):
+        logits = logits.detach().cpu()
+
+        res = []
+        for i in range(logits.size(1)):  # iterate over batch size
+            decoded, _ = tf.nn.ctc_beam_search_decoder(
+                logits[:, i].unsqueeze(1).numpy(),
+                [lens[i]],
+                beam_width,
+                1
+            )
+            res.append(decoded[0].values.numpy())
+
+        return res
 
 
 # dont forget about FPN
@@ -91,7 +103,7 @@ class FeatureExtractor(nn.Module):
     def __init__(self, resnet=False):
         super().__init__()
         if resnet:
-            self.fe = timm.create_model('efficientnet_b0',
+            self.fe = timm.create_model('resnet18',
                                         num_classes=0,
                                         global_pool='',
                                         in_chans=1,
@@ -113,7 +125,7 @@ class FeatureExtractor(nn.Module):
 
     def forward(self, x):
         y = self.fe(x)
-        return torch.mean(y, dim=2).squeeze(2)  # BS, C, W
+        return torch.mean(y, dim=2).squeeze(2)
 
 
 class Encoder(nn.Module):
@@ -123,91 +135,114 @@ class Encoder(nn.Module):
                  num_layers=3,
                  bidirectional=True,
                  dropout=0.1,
-                 output_size=81):
+                 out_channels=81):
         super().__init__()
+        self.num_layers = num_layers
+        self.hidden_size = hidden_size
+        self.bidirectional = bidirectional
+        self.num_directions = 2 if self.bidirectional else 1
 
         self.lstm = nn.LSTM(input_size=input_size,
-                            hidden_size=hidden_size,
-                            num_layers=num_layers,
-                            bidirectional=bidirectional,
+                            hidden_size=self.hidden_size,
+                            num_layers=self.num_layers,
+                            bidirectional=self.bidirectional,
                             dropout=dropout)
         self.conv = nn.Sequential(
-            nn.Conv1d(1, output_size, (hidden_size * 2, 1), (1, 1)),
+            nn.Conv1d(1, out_channels, (256, 1), (1, 1)),
             # nn.LeakyReLU()
         )
 
     def forward(self, x):
-        # BS, C, W
-        seq = x.permute(2, 0, 1)  # seq_len(W), BS, input_size(C)
-        hs, _ = self.lstm(seq)  # seq_len(W), BS, HS * 2
-        hs = hs.permute(1, 2, 0)  # BS, HS * 2, seq_len(W)
-        hs = hs.unsqueeze(1)  # BS, 1, HS * 2, W
-        logits = self.conv(hs).squeeze(2)  # BS, out_C, W
+        seq = x.permute(2, 0, 1)  # seq_len(width), bs, input_size(channels)
 
-        return torch.argmax(F.softmax(logits, dim=1), dim=1)  # BS, W
+        hidden_states = []
+        bs = seq.size(1)
+        h, c = self.init_hidden(bs, seq.device)
+        for x_t in seq:
+            _, (h, c) = self.lstm(x_t.unsqueeze(0), (h, c))
+            hidden_states.append(h.view(self.num_layers,
+                                        self.num_directions,
+                                        bs,
+                                        self.hidden_size)[-1, -1])
+
+        y = torch.stack(hidden_states, dim=0)  # seq_len, bs, hidden_size
+        y = y.permute(1, 2, 0)  # bs, seq_len(width), hidden_size
+        y = y.unsqueeze(1)
+        logits = self.conv(y).squeeze(2)  # bs, out_channels, width
+
+        return torch.argmax(F.softmax(logits, dim=1), dim=1)
+
+    def init_hidden(self, bs, device):
+        return torch.zeros(2, self.num_layers * self.num_directions,
+                           bs, self.hidden_size,
+                           dtype=torch.float, device=device)
 
 
 class AttentionDecoder(nn.Module):
     def __init__(self,
-                 enc_os=81,
+                 enc_hidden_size=81,
                  hidden_size=256,
-                 dropout=0.1,
+                 dropout=0.5,
                  sos_idx=1,
                  eos_idx=2,
-                 max_len=300):
+                 enc_max_len=320,
+                 text_max_len=150,
+                 teacher_ratio=0.9):
         super().__init__()
         self.sos_idx = sos_idx
         self.eos_idx = eos_idx
-        self.max_len = max_len
+        self.text_max_len = text_max_len
+        self.enc_max_len = enc_max_len
 
         self.hidden_size = hidden_size
-        self.criterion = nn.CrossEntropyLoss(reduction='none')
+        self.teacher_ratio = teacher_ratio
 
-        self.emb = nn.Embedding(enc_os, self.hidden_size)
+        self.ce_loss = nn.CrossEntropyLoss(reduction='none')
+
+        self.emb = nn.Embedding(enc_hidden_size, self.hidden_size)
         self.pe = PositionalEncoder(self.hidden_size)
         self.lstm_cell = nn.LSTMCell(input_size=self.hidden_size,
                                      hidden_size=self.hidden_size)
         self.dropout = nn.Dropout(dropout)
 
         # attention
-        self.att = nn.Linear(hidden_size * 2, max_len)
+        self.att = nn.Linear(hidden_size * 2, self.enc_max_len)
         self.att_combine = nn.Linear(hidden_size * 2, hidden_size)
 
-        self.fc = nn.Linear(self.hidden_size, enc_os)
+        self.fc = nn.Linear(self.hidden_size, enc_hidden_size)
 
-    def forward(self, enc_out, target_seq=None, teacher=False):
+    def forward(self, enc_out, target_seq=None, target_lens=None):
         encoded = self.emb(enc_out)  # BS, W, HS
         encoded = self.pe(encoded)  # BS, W, HS
 
-        assert encoded.size(1) < self.max_len,\
+        assert encoded.size(1) < self.enc_max_len,\
             f'got {encoded.size(1)} size of encoder out, ' \
-            f'but maximal is {self.max_len}'
+            f'but maximal is {self.enc_max_len}'
 
         pad_tensor = torch.zeros(encoded.size(0),
-                                 self.max_len - encoded.size(1),
+                                 self.enc_max_len - encoded.size(1),
                                  encoded.size(2)).to(enc_out.device)
-        padded_enc_out = torch.cat([encoded, pad_tensor], dim=1)
+        padded_enc_out = torch.cat([encoded, pad_tensor], dim=1)  # BS, ml, HS
 
-        seq = encoded.permute(1, 0, 2)  # seq_len(W), BS, HS
-        bs = seq.size(1)
-
-        h_dec, c = self.init_hidden(bs, seq.device)
+        bs = enc_out.size(0)
+        h_dec, c = self.init_hidden(bs, enc_out.device)
         x_dec = torch.ones(
             bs,
             dtype=torch.int64,
-            device=seq.device
+            device=enc_out.device
         ) * self.sos_idx  # BS (<sos>)
 
         seq_logits = []
         losses = torch.tensor([], device=x_dec.device)
-        for i in range(self.max_len):
+        cur_max_len = torch.max(target_lens)
+        for i in range(self.text_max_len):
             x_emb = self.emb(x_dec)  # BS, HS
             x_emb = self.dropout(x_emb)
 
             # attention
             att_x = torch.cat([x_emb, h_dec], 1)  # BS, 2HS
             energy = self.att(att_x)  # BS, max_len
-            att_w = F.softmax(energy, dim=1)
+            att_w = F.softmax(energy, dim=1)  # BS, max_len
 
             # (1, max_len) X (max_len, HS)
             a = torch.bmm(att_w.unsqueeze(1), padded_enc_out)  # BS, 1, HS
@@ -222,9 +257,10 @@ class AttentionDecoder(nn.Module):
             # use targets as the next input?
             if target_seq is not None:
                 current_y = target_seq[:, i]
-                cur_losses = self.criterion(logits, current_y).flatten()
+                cur_losses = self.ce_loss(logits, current_y)
                 losses = torch.cat([losses, cur_losses])
 
+                teacher = np.random.random() < self.teacher_ratio
                 if teacher and self.training:
                     x_dec = current_y  # BS
                 else:
@@ -232,19 +268,16 @@ class AttentionDecoder(nn.Module):
 
             # ended sequence?
             if (x_dec == self.eos_idx).sum() == x_dec.shape[0]:
-                break
+                if len(logits) >= cur_max_len:
+                    break
 
         loss = torch.mean(losses)  # average loss
 
-        return torch.stack(seq_logits).permute(1, 0, 2), loss  # BS, W, OS
+        return torch.stack(seq_logits), loss  # W, BS, OS
 
     def init_hidden(self, bs, device):
-        h_zeros = torch.zeros(bs, self.hidden_size,
-                              dtype=torch.float, device=device)
-        c_zeros = torch.zeros(bs, self.hidden_size,
-                              dtype=torch.float, device=device)
-
-        return h_zeros, c_zeros
+        return torch.zeros(2, bs, self.hidden_size,
+                           dtype=torch.float, device=device)
 
 
 class PositionalEncoder(nn.Module):
