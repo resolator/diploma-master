@@ -75,7 +75,7 @@ class BaselineNet(nn.Module):
         """
         preds = preds.permute(1, 0)  # bs, seq_len
         bs = preds.size(0)
-        preds_lens = [self.max_len] * bs
+        preds_lens = [preds.size(1)] * bs
         last_sample = -1
         for sample, idx in torch.nonzero(preds == self.c2i['é']):
             if sample != last_sample:
