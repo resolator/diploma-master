@@ -20,7 +20,8 @@ class BaselineNet(nn.Module):
                  enc_n_layers=3,
                  enc_bidirectional=True,
                  max_len=150,
-                 teacher_ratio=0.5):
+                 teacher_ratio=0.5,
+                 dropout=0.5):
         super().__init__()
         self.max_len = max_len
         self.c2i, self.i2c = build_alphabet()
@@ -31,14 +32,16 @@ class BaselineNet(nn.Module):
                                hidden_size=enc_hs,
                                num_layers=enc_n_layers,
                                bidirectional=enc_bidirectional,
-                               out_channels=enc_out_channels)
+                               out_channels=enc_out_channels,
+                               dropout=dropout)
         self.decoder = AttentionDecoder(enc_out_channels,
                                         64,
                                         hidden_size=dec_hs,
                                         sos_idx=self.c2i['ś'],
                                         eos_idx=self.c2i['é'],
                                         max_len=self.max_len,
-                                        teacher_ratio=teacher_ratio)
+                                        teacher_ratio=teacher_ratio,
+                                        dropout=dropout)
         self.ctc_loss = nn.CTCLoss(self.c2i['ƀ'], 'mean', True)
         self.ce_loss = nn.CrossEntropyLoss(reduction='none')
 
@@ -206,7 +209,7 @@ class AttentionDecoder(nn.Module):
                  enc_hidden_size=81,
                  emb_size=64,
                  hidden_size=256,
-                 dropout=0.1,
+                 dropout=0.5,
                  sos_idx=1,
                  eos_idx=2,
                  max_len=150,

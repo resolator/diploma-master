@@ -20,7 +20,8 @@ class BaselineNet(nn.Module):
                  enc_n_layers=3,
                  enc_bidirectional=True,
                  max_len=150,
-                 teacher_ratio=0.5):
+                 teacher_ratio=0.5,
+                 dropout=0.5):
         super().__init__()
         self.max_len = max_len
         self.c2i, self.i2c = build_alphabet()
@@ -31,14 +32,16 @@ class BaselineNet(nn.Module):
                                hidden_size=enc_hs,
                                num_layers=enc_n_layers,
                                bidirectional=enc_bidirectional,
-                               out_channels=enc_out_channels)
+                               out_channels=enc_out_channels,
+                               dropout=dropout)
         self.decoder = AttentionDecoder(enc_hidden_size=enc_out_channels,
                                         hidden_size=dec_hs,
                                         sos_idx=self.c2i['ś'],
                                         eos_idx=self.c2i['é'],
                                         enc_max_len=320,
                                         text_max_len=self.max_len,
-                                        teacher_ratio=teacher_ratio)
+                                        teacher_ratio=teacher_ratio,
+                                        dropout=dropout)
 
     def forward(self, x, target_seq=None, target_lens=None):
         x = self.fe(x)
@@ -134,7 +137,7 @@ class Encoder(nn.Module):
                  hidden_size=256,
                  num_layers=3,
                  bidirectional=True,
-                 dropout=0.1,
+                 dropout=0.5,
                  out_channels=81):
         super().__init__()
         self.num_layers = num_layers

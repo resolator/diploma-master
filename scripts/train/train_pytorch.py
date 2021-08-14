@@ -48,7 +48,15 @@ def get_args():
     parser.add_argument('--height', type=int, default=64,
                         help='Input image height. Will resize to this value.')
     parser.add_argument('--augment', action='store_true',
-                        help='Auggment images.')
+                        help='Augment images.')
+
+    parser.add_argument('--model-type', default='my',
+                        choices=['my', 'pytorch'],
+                        help='Model implementation to train.')
+    parser.add_argument('--teacher-ratio', type=float, default=0.9,
+                        help='Teacher ratio for decoder.')
+    parser.add_argument('--dropout', type=float, default=0.5,
+                        help='Dropout.')
 
     parser.add_argument('--save-to', type=Path,
                         help='Path to save dir.')
@@ -62,16 +70,23 @@ def create_model(height=64,
                  enc_n_layers=3,
                  enc_bidirectional=True,
                  max_len=150,
-                 teacher_ratio=0.9):
+                 teacher_ratio=0.9,
+                 model_type='my',
+                 dropout=0.5):
     """Wrapper for creating different models."""
-    # model = MyBaselineNet(height=height,
-    model = BaselineNet(height=height,
+    if model_type == 'my':
+        model_class = MyBaselineNet
+    else:
+        model_class = BaselineNet
+
+    model = model_class(height=height,
                         enc_hs=enc_hs,
                         dec_hs=dec_hs,
                         enc_n_layers=enc_n_layers,
                         enc_bidirectional=enc_bidirectional,
                         max_len=max_len,
-                        teacher_ratio=teacher_ratio)
+                        teacher_ratio=teacher_ratio,
+                        dropout=dropout)
 
     return model
 
@@ -184,7 +199,14 @@ def main():
         device = torch.device('cuda')
 
     text_max_len = 150
-    model = create_model(height=args.height, max_len=text_max_len).to(device)
+    model = create_model(
+        height=args.height,
+        enc_hs=256,
+        dec_hs=256,
+        max_len=text_max_len,
+        teacher_ratio=args.teacher_ratio,
+        model_type=args.model_type
+    ).to(device)
     optim = torch.optim.Adam(params=model.parameters(), lr=args.lr)
 
     # datasets
