@@ -118,11 +118,10 @@ def calc_cer(gt, pd, gt_lens=None):
     return fastwer.score(pd, gt, char_level=True)
 
 
-def epoch_step(model, loaders, device, optim):
+def epoch_step(model, loaders, device, optim, model_type):
     metrics = {'cer': {'train': 0.0, 'valid': 0.0},
                'cer_beam': {'train': 0.0, 'valid': 0.0},
                'loss': {'train': 0.0, 'valid': 0.0}}
-    my_baseline_net = False
 
     for stage in ['train', 'valid']:
         is_train = stage == 'train'
@@ -137,7 +136,7 @@ def epoch_step(model, loaders, device, optim):
             # old
             img, text, lens = img.to(device), text.to(device), lens.to(device)
 
-            if my_baseline_net:
+            if model_type == 'my':
                 logits, preds = model(img, text, lens)
                 loss = model.calc_loss(logits, text, lens, preds, ce=True)
             else:
@@ -236,7 +235,7 @@ def main():
     ep = 1
     while ep != args.epochs + 1:
         print(f'\nEpoch #{ep}')
-        metrics = epoch_step(model, loaders, device, optim)
+        metrics = epoch_step(model, loaders, device, optim, args.model_type)
 
         # dump metrics
         for m_name, m_values in metrics.items():
