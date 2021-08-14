@@ -12,6 +12,8 @@ from pathlib import Path
 from torch.utils.data import Dataset
 from xml.etree import ElementTree as ET
 
+import transforms as my_t
+
 
 class IAMDataset(Dataset):
     """PyTorch wrapper for IAM dataset."""
@@ -70,12 +72,18 @@ class IAMDataset(Dataset):
                 albu.SmallestMaxSize(self.height),
                 albu.CLAHE(),
                 albu.Emboss(),
-                albu.RandomBrightnessContrast()
+                albu.RandomBrightnessContrast(),
+                my_t.SkewCorrection(),
+                my_t.SlantCorrection(),
+                my_t.ContrastNormalization()
             ])
         else:
             self.transform = albu.Compose([
                 albu.CropAndPad([0, 20, 0, 20], pad_cval=255),
-                albu.SmallestMaxSize(self.height)
+                albu.SmallestMaxSize(self.height),
+                my_t.SkewCorrection(),
+                my_t.SlantCorrection(),
+                my_t.ContrastNormalization()
             ])
 
     def __len__(self):
