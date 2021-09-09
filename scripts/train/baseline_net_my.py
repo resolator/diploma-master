@@ -42,7 +42,7 @@ class BaselineNet(nn.Module):
                                         max_len=self.max_len,
                                         teacher_ratio=teacher_ratio,
                                         dropout=dropout)
-        self.ctc_loss = nn.CTCLoss(self.c2i['ƀ'], 'mean', True)
+        self.ctc_loss = nn.CTCLoss(self.c2i['_'], 'mean', True)
         self.ce_loss = nn.CrossEntropyLoss(reduction='none')
 
     def forward(self, x, target_seq=None, target_lens=None):
@@ -196,7 +196,7 @@ class Encoder(nn.Module):
         y = y.unsqueeze(1)
         logits = self.conv(y).squeeze(2)  # bs, out_channels, width
 
-        return torch.argmax(F.softmax(logits, dim=1), dim=1)
+        return torch.argmax(F.softmax(logits, dim=1), dim=1)  # BS, W
 
     def init_hidden(self, bs, device):
         return torch.zeros(2, self.num_layers * self.num_directions,

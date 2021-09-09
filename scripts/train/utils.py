@@ -5,7 +5,7 @@ from string import digits, ascii_letters
 
 
 def build_alphabet():
-    symbs = ['ƀ', 'ś', 'é', ' ', '!', '"', '#', '&', '\'',
+    symbs = ['_', 'ś', 'é', ' ', '!', '"', '#', '&', '\'',
              '(', ')', '*', '+', ',', '-', '.', '/', ':', ';', '?']
     i2c = symbs + list(digits) + list(ascii_letters)
     c2i = {c: idx for idx, c in enumerate(i2c)}

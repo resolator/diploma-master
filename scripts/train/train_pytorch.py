@@ -113,14 +113,14 @@ def save_model(model, optim, args, ep, metrics, best_metrics, models_dir):
 def calc_cer(gt, pd, gt_lens=None):
     if gt_lens is not None:
         gt = [x[:y] for x, y in zip(gt, gt_lens)]
-        pd = [x[:y] for x, y in zip(pd, gt_lens)]
+        pd = [x.replace('_', '')[:y] for x, y in zip(pd, gt_lens)]
 
     return fastwer.score(pd, gt, char_level=True)
 
 
 def epoch_step(model, loaders, device, optim, model_type):
     metrics = {'cer': {'train': 0.0, 'valid': 0.0},
-               'cer_beam': {'train': 0.0, 'valid': 0.0},
+               'cer-beam': {'train': 0.0, 'valid': 0.0},
                'loss': {'train': 0.0, 'valid': 0.0}}
 
     for stage in ['train', 'valid']:
@@ -149,13 +149,13 @@ def epoch_step(model, loaders, device, optim, model_type):
 
             # cer
             gt_text = loaders[stage].dataset.tensor2text(text)
-            pd_lens = model.calc_preds_lens(preds)
-            pd_beam = model.decode_ctc_beam_search(logits, pd_lens)
+            pd_lens = model.calc_lens(logits)
+            pd_beam = model.decode(logits, pd_lens)  # Calculation inefficient
             pd_beam = loaders[stage].dataset.tensor2text(pd_beam, True)
 
             gt_lens = lens.detach().cpu().numpy()
             cer = calc_cer(gt_text, pd_beam, gt_lens)
-            metrics['cer_beam'][stage] += cer / loader_size
+            metrics['cer-beam'][stage] += cer / loader_size
 
             pd_text = loaders[stage].dataset.tensor2text(preds.permute(1, 0))
             cer = calc_cer(gt_text, pd_text, gt_lens)
@@ -197,7 +197,7 @@ def main():
     if torch.cuda.is_available():
         device = torch.device('cuda')
 
-    text_max_len = 150
+    text_max_len = 320
     model = create_model(
         height=args.height,
         enc_hs=256,
@@ -224,12 +224,12 @@ def main():
                'collate_fn': IAMDataset.collate_fn}
     loaders = {
         'train': DataLoader(ds_train, shuffle=True, **dl_args),
-        'valid': DataLoader(ds_valid, **dl_args)
+        'valid': DataLoader(ds_valid, shuffle=True, **dl_args)
     }
 
     # model saving initialization
     best_metrics = {'cer': {'train': np.inf, 'valid': np.inf},
-                    'cer_beam': {'train': np.inf, 'valid': np.inf},
+                    'cer-beam': {'train': np.inf, 'valid': np.inf},
                     'loss': {'train': np.inf, 'valid': np.inf}}
 
     ep = 1

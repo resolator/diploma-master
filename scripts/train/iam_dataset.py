@@ -64,7 +64,7 @@ class IAMDataset(Dataset):
         if self.augment:
             self.transform = albu.Compose([
                 albu.CropAndPad([0, [15, 40], 0, [15, 40]], pad_cval=255),
-                albu.GaussianBlur(3, p=0.4),
+                albu.GaussianBlur(3, 3, p=0.4),
                 albu.Affine(scale=[0.9, 1.0],
                             shear={'x':[-9, 9]},
                             cval=255,
