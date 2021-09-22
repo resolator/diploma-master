@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*
 """Training launcher."""
+import sys
 import torch
 import configargparse
 
@@ -12,8 +13,11 @@ from pprint import pprint
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 
-from printed_dataset import PrintedDataset
-from utils import build_alphabet, create_model, calc_cer
+from iam_dataset import IAMDataset
+
+sys.path.append(str(Path(sys.path[0]).parent))
+from common.utils import build_alphabet, create_model, calc_cer
+
 
 
 def get_args():
@@ -23,10 +27,16 @@ def get_args():
                         help='Path to config file.')
 
     # dataset
-    parser.add_argument('--train-dir', type=Path, required=True,
-                        help='Path to train dir.')
-    parser.add_argument('--valid-dir', type=Path, required=True,
-                        help='Path to validation dir.')
+    parser.add_argument('--images-dir', type=Path, required=True,
+                        help='Path to root dir with images (ex. iam/lines/).')
+    parser.add_argument('--mkp-dir', type=Path, required=True,
+                        help='Path to dir with xml files (ex. iam/xml).')
+    parser.add_argument('--train-split', type=Path, required=True,
+                        help='Path to train split file. Can be generated '
+                             'using scripts/utils/gen_split_file.py.')
+    parser.add_argument('--valid-split', type=Path, required=True,
+                        help='Path to validation split file. Can be generated '
+                             'using scripts/utils/gen_split_file.py.')
 
     parser.add_argument('--epochs', type=int, default=-1,
                         help='Number of epochs to train. '
@@ -35,8 +45,12 @@ def get_args():
                         help='Batch size.')
     parser.add_argument('--lr', type=float, default=1e-3,
                         help='Learning rate.')
-    parser.add_argument('--workers', type=int, default=2,
+    parser.add_argument('--workers', type=int, default=4,
                         help='Number of data loader workers.')
+    parser.add_argument('--height', type=int, default=64,
+                        help='Input image height. Will resize to this value.')
+    parser.add_argument('--augment', action='store_true',
+                        help='Augment images.')
 
     parser.add_argument('--save-to', type=Path,
                         help='Path to save dir.')
@@ -136,23 +150,29 @@ def main():
     if torch.cuda.is_available():
         device = torch.device('cuda')
 
-    c2i, i2c = build_alphabet()
+    c2i, i2c = build_alphabet(False, True)
     model = create_model(c2i, i2c).to(device)
     optim = torch.optim.Adam(params=model.parameters(), lr=args.lr)
 
     # datasets
-    text_max_len = 62
-    ds_args = {'c2i': c2i,
+    text_max_len = 98
+    ds_args = {'images_dir': args.images_dir,
+               'markup_dir': args.mkp_dir,
+               'height': args.height,
                'i2c': i2c,
-               'text_max_len': text_max_len}
-    ds_train = PrintedDataset(args.train_dir, **ds_args)
-    ds_valid = PrintedDataset(args.valid_dir, **ds_args)
+               'max_len': text_max_len}
+    ds_train = IAMDataset(split_filepath=args.train_split,
+                          augment=args.augment,
+                          **ds_args)
+    ds_valid = IAMDataset(split_filepath=args.valid_split, **ds_args)
 
     dl_args = {'batch_size': args.bs,
                'num_workers': args.workers,
                'shuffle': True}
-    loaders = {'train': DataLoader(ds_train, **dl_args),
-               'valid': DataLoader(ds_valid, **dl_args)}
+    loaders = {'train': DataLoader(ds_train,
+                                   collate_fn=ds_train.collate_fn, **dl_args),
+               'valid': DataLoader(ds_valid,
+                                   collate_fn=ds_valid.collate_fn, **dl_args)}
 
     # model saving initialization
     best_metrics = {'cer': {'train': np.inf, 'valid': np.inf},

@@ -2,8 +2,8 @@
 # -*- coding: utf-8 -*
 """Template doc"""
 import fastwer
-from baseline_net import BaselineNet
-from seq2seq_model import Seq2seqModel
+from .baseline_net import BaselineNet
+from .seq2seq_model import Seq2seqModel
 from string import digits, ascii_letters
 
 

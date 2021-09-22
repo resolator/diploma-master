@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*
 """Training launcher."""
+import sys
 import torch
 import configargparse
 
@@ -13,7 +14,9 @@ from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 
 from printed_dataset import PrintedDataset
-from utils import build_alphabet, create_model, calc_cer
+
+sys.path.append(str(Path(sys.path[0]).parent))
+from common.utils import build_alphabet, create_model, calc_cer
 
 
 def get_args():
