@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*
-"""Template doc"""
+"""Seq2Seq model with Bahdanau attention."""
 import torch
+import numpy as np
 from torch import nn
 from torch.nn import functional as F
 
@@ -10,10 +11,14 @@ class Seq2seqModel(nn.Module):
     def __init__(self,
                  i2c,
                  text_max_len,
-                 hs=128,
+                 enc_hs=128,
+                 dec_hs=128,
+                 emb_size=128,
                  enc_n_layers=1,
                  dec_n_layers=1,
-                 dropout_p=0.1):
+                 dropout_p=0.1,
+                 pe=False,
+                 teacher_rate=0.9):
         super().__init__()
         self.i2c = i2c
         self.c2i = {c: idx for idx, c in enumerate(i2c)}
@@ -22,15 +27,17 @@ class Seq2seqModel(nn.Module):
 
         self.fe = FeatureExtractor()
         self.encoder = Encoder(input_sz=256,
-                               hs=hs,
+                               hs=enc_hs,
                                n_layers=enc_n_layers)
+        self.pe = PositionalEncoder(enc_hs * 2) if pe else None
         self.decoder = Decoder(text_max_len=text_max_len,
                                sos_idx=sos_idx,
-                               hs=hs,
-                               emb_size=hs,
+                               hs=dec_hs,
+                               emb_size=emb_size,
                                alphabet_size=alpb_size,
                                dropout_p=dropout_p,
-                               n_layers=dec_n_layers)
+                               n_layers=dec_n_layers,
+                               teacher_rate=teacher_rate)
         self.loss_f = nn.NLLLoss(reduction='none', ignore_index=sos_idx)
 
     def calc_loss(self, logs_probs, targets, targets_lens):
@@ -45,11 +52,14 @@ class Seq2seqModel(nn.Module):
 
         loss = torch.mean(loss[mask])
 
-        return loss
+        return loss# BS, C, W
 
     def forward(self, x, target_seq=None):
         y = self.fe(x)
         y = self.encoder(y)
+
+        if self.pe is not None:
+            y = self.pe(y)
 
         return self.decoder(y, target_seq)
 
@@ -123,7 +133,8 @@ class Decoder(nn.Module):
                  emb_size=256,
                  alphabet_size=81,
                  dropout_p=0.1,
-                 n_layers=1):
+                 n_layers=1,
+                 teacher_rate=0.9):
         super().__init__()
         self.sos_idx = sos_idx
         self.n_layers = n_layers
@@ -132,6 +143,7 @@ class Decoder(nn.Module):
         self.dropout_p = dropout_p
         self.emb_size = emb_size
         self.max_len = text_max_len
+        self.teacher_rate = teacher_rate
 
         self.emb = nn.Embedding(alphabet_size, self.emb_size)
         self.dropout = nn.Dropout(self.dropout_p)
@@ -140,24 +152,22 @@ class Decoder(nn.Module):
                             num_layers=self.n_layers,
                             batch_first=True)
         self.attention = BahdanauAttention(hs)
-        self.pre_output_layer = nn.Linear(hs + 2*hs + self.emb_size, hs)
-        self.out = nn.Linear(self.hs, self.alphabet_size)
+        self.linear_1 = nn.Linear(hs + 2 * hs + self.emb_size, hs)
+        self.linear_2 = nn.Linear(self.hs, self.alphabet_size)
 
     def forward_step(self, x, enc_out, proj_key, hc):
-        # compute context vector using attention mechanism
-        query = hc[0][-1].unsqueeze(1)  # [#layers, B, D] -> [B, 1, D]
+        query = hc[0][-1].unsqueeze(1)  # BS, 1, HS
 
         context, attn_probs = self.attention(query, proj_key, enc_out)
 
-        # update rnn hidden state
-        rnn_input = torch.cat([x, context], dim=2)
-        output, hidden = self.lstm(rnn_input, hc)
+        rnn_x = torch.cat([x, context], dim=2)
+        y, hc = self.lstm(rnn_x, hc)
 
-        pre_output = torch.cat([x, output, context], dim=2)
+        pre_output = torch.cat([x, y, context], dim=2)
         pre_output = self.dropout(pre_output)
-        pre_output = self.pre_output_layer(pre_output)
+        logits = self.linear_1(pre_output)
 
-        return output, hidden, pre_output, attn_probs
+        return y, hc, logits, attn_probs
 
     def forward(self, enc_out, target_seq=None):
         bs = enc_out.shape[0]
@@ -185,12 +195,14 @@ class Decoder(nn.Module):
             attentions.append(attn_probs)
 
             # BS, HS
-            log_probs = F.log_softmax(self.out(pre_output[:, -1]), dim=-1)
+            log_probs = F.log_softmax(self.linear_2(pre_output[:, -1]), dim=-1)
             logs_probs.append(log_probs)
             _, next_word = torch.max(log_probs, dim=1)
             preds.append(next_word)
 
-            if target_seq is not None and self.training:
+            # select next input
+            use_gt = np.random.rand() <= self.teacher_rate
+            if (target_seq is not None) and self.training and use_gt:
                 x = target_seq[:, i].unsqueeze(1)
             else:
                 x = next_word.unsqueeze(1)
@@ -205,12 +217,10 @@ class Decoder(nn.Module):
 
 
 class BahdanauAttention(nn.Module):
-    """Implements Bahdanau (MLP) attention"""
-
     def __init__(self, hs=256, key_size=None, query_size=None):
         super().__init__()
 
-        # We assume a bi-directional encoder so key_size is 2*hidden_size
+        # bidirectional lstm so key_size is 2*hidden_size
         key_size = 2 * hs if key_size is None else key_size
         query_size = hs if query_size is None else query_size
 
@@ -219,19 +229,29 @@ class BahdanauAttention(nn.Module):
         self.energy_layer = nn.Linear(hs, 1, bias=False)
 
     def forward(self, dec_hs, enc_hss, value):
-        # We first project the query (the decoder state).
-        # The projected keys (the encoder states) were already pre-computated.
+        # encoder states are already pre-computated
         dec_hs = self.decoder_linear(dec_hs)
-
-        # Calculate scores.
         scores = self.energy_layer(torch.tanh(dec_hs + enc_hss))
         scores = scores.squeeze(2).unsqueeze(1)
-
-        # Turn scores to probabilities.
         alphas = F.softmax(scores, dim=-1)
-
-        # The context vector is the weighted sum of the values.
         context = torch.bmm(alphas, value)
 
-        # context shape: [B, 1, 2D], alphas shape: [B, 1, M]
-        return context, alphas
+        return context, alphas  # BS, 1, 2HS; BS, 1, M
+
+
+class PositionalEncoder(nn.Module):
+    def __init__(self, d_model, max_len=512):
+        super().__init__()
+
+        pe = torch.zeros(max_len, d_model)
+        position = torch.arange(0, max_len, dtype=torch.float).unsqueeze(1)
+        a = torch.arange(0, d_model, 2) * (-np.log(10000.0) / d_model)
+        div_term = torch.exp(a) * position
+        pe[:, 0::2] = torch.sin(div_term)
+        pe[:, 1::2] = torch.cos(div_term)
+        pe = pe.unsqueeze(0)
+
+        self.register_buffer('pe', pe)
+
+    def forward(self, x):
+        return x + self.pe[:, x.size(1)]
