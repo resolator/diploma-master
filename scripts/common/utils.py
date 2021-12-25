@@ -12,12 +12,12 @@ def build_alphabet(light=True, with_ctc_blank=True, with_sos=False):
     i2c = i2c + ['ś'] if with_sos else i2c
 
     if light:
-        i2c = i2c + [' ', 'é', 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'i', 'k',
+        i2c = i2c + [' ', 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'i', 'k',
                      'm', 'n', 'o', 'p', 'q', 'r', 's', 'u', 'v', 'w', 'x',
-                     'y', 'z']
+                     'y', 'z', 'é']
     else:
-        symbs = ['é', ' ', '!', '"', '#', '&', '\'', '(', ')', '*', '+',
-                 ',', '-', '.', '/', ':', ';', '?']
+        symbs = [' ', '!', '"', '#', '&', '\'', '(', ')', '*', '+',
+                 ',', '-', '.', '/', ':', ';', '?', 'é']
         i2c = i2c + symbs + list(digits) + list(ascii_letters)
 
     c2i = {c: idx for idx, c in enumerate(i2c)}
@@ -25,13 +25,13 @@ def build_alphabet(light=True, with_ctc_blank=True, with_sos=False):
     return c2i, i2c
 
 
-def create_model(c2i, i2c, model_type='ctc', text_max_len=62):
+def create_model(c2i, i2c, model_type='ctc', text_max_len=62, pe=False):
     """Wrapper for creating different models."""
 
     if model_type == 'ctc':
         model = BaselineNet(c2i, i2c)
     elif model_type == 'seq2seq':
-        model = Seq2seqModel(i2c, text_max_len)
+        model = Seq2seqModel(i2c, text_max_len, pe=pe)
     else:
         raise AssertionError('model type must be "ctc" or "seq2seq"')
 
