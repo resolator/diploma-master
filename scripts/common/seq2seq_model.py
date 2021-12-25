@@ -119,10 +119,12 @@ class Encoder(nn.Module):
                             bidirectional=True)
 
     def forward(self, x):
+        # BS, C, W
         x = x.permute(2, 0, 1)  # W, BS, C
         y, _ = self.lstm(x)  # W, BS, 2HS
 
-        return y.permute(1, 0, 2)  # BS, W, 2HS
+        # return y.permute(1, 0, 2)  # BS, W, 2HS
+        return y.permute(1, 2, 0)  # BS, 2HS, W
 
 
 class Decoder(nn.Module):
@@ -134,7 +136,8 @@ class Decoder(nn.Module):
                  alphabet_size=81,
                  dropout_p=0.1,
                  n_layers=1,
-                 teacher_rate=0.9):
+                 teacher_rate=0.9,
+                 pad_size=550):
         super().__init__()
         self.sos_idx = sos_idx
         self.n_layers = n_layers
@@ -144,15 +147,16 @@ class Decoder(nn.Module):
         self.emb_size = emb_size
         self.max_len = text_max_len
         self.teacher_rate = teacher_rate
+        self.pad_size = pad_size
 
         self.emb = nn.Embedding(alphabet_size, self.emb_size)
         self.dropout = nn.Dropout(self.dropout_p)
-        self.lstm = nn.LSTM(self.emb_size + 2 * self.hs,
+        self.lstm = nn.LSTM(self.emb_size + self.pad_size,
                             self.hs,
                             num_layers=self.n_layers,
                             batch_first=True)
-        self.attention = BahdanauAttention(hs)
-        self.linear_1 = nn.Linear(hs + 2 * hs + self.emb_size, hs)
+        self.attention = BahdanauAttention(hs, key_size=self.pad_size)
+        self.linear_1 = nn.Linear(self.emb_size + self.pad_size + hs, hs)
         self.linear_2 = nn.Linear(self.hs, self.alphabet_size)
 
     def forward_step(self, x, enc_out, proj_key, hc):
@@ -170,6 +174,11 @@ class Decoder(nn.Module):
         return y, hc, logits, attn_probs
 
     def forward(self, enc_out, target_seq=None):
+        if enc_out.size(2) < self.pad_size:
+            diff = self.pad_size - enc_out.size(2)
+            enc_out = F.pad(enc_out, [0, diff], mode='constant', value=0)
+        proj_key = self.attention.key_layer(enc_out)
+        
         bs = enc_out.shape[0]
         h, c = self.init_hidden(bs, enc_out.device)
         x = torch.ones(
@@ -178,7 +187,6 @@ class Decoder(nn.Module):
             device=enc_out.device
         ) * self.sos_idx
 
-        proj_key = self.attention.key_layer(enc_out)
         decoder_states = []
         pre_output_vectors = []
         logs_probs = []
@@ -242,16 +250,16 @@ class BahdanauAttention(nn.Module):
 class PositionalEncoder(nn.Module):
     def __init__(self, d_model, max_len=512):
         super().__init__()
-
-        pe = torch.zeros(max_len, d_model)
-        position = torch.arange(0, max_len, dtype=torch.float).unsqueeze(1)
+        
+        position = torch.arange(max_len)
         a = torch.arange(0, d_model, 2) * (-np.log(10000.0) / d_model)
-        div_term = torch.exp(a) * position
-        pe[:, 0::2] = torch.sin(div_term)
-        pe[:, 1::2] = torch.cos(div_term)
-        pe = pe.unsqueeze(0)
+        div_term = torch.exp(a).unsqueeze(1)
 
+        pe = torch.zeros(1, d_model, max_len)
+        pe[0, 0::2, :] = torch.sin(position * div_term)
+        pe[0, 1::2, :] = torch.cos(position * div_term)
+        
         self.register_buffer('pe', pe)
 
     def forward(self, x):
-        return x + self.pe[:, x.size(1)]
+        return x + self.pe[:, :, :x.size(2)]
