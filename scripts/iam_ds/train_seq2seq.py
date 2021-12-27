@@ -36,6 +36,8 @@ def get_args():
     parser.add_argument('--valid-split', type=Path, required=True,
                         help='Path to validation split file. Can be generated '
                              'using scripts/utils/gen_split_file.py.')
+    parser.add_argument('--ckpt-path', type=Path,
+                        help='Path to saved model to load for training.')
 
     # training
     parser.add_argument('--epochs', type=int, default=-1,
@@ -80,7 +82,8 @@ def save_model(model, optim, args, ep, metrics, best_metrics, models_dir):
                  'optim': optim.state_dict(),
                  'args': args,
                  'epoch': ep,
-                 'valid_metrics': metrics,
+                 'metrics': metrics,
+                 'best_metrics': best_metrics,
                  'i2c': model.i2c}
 
     for m in metrics.keys():
@@ -91,6 +94,15 @@ def save_model(model, optim, args, ep, metrics, best_metrics, models_dir):
                 best_metrics[m][stage] = metrics[m][stage]
 
                 print(f'Saved {stage} {m}')
+
+
+def load_model(ckpt_path, model, optim, device):
+    ckpt = torch.load(ckpt_path, map_location=device)
+    model.load_state_dict(ckpt['model'])
+    optim.load_state_dict(ckpt['optim'])
+    best_metrics = ckpt['best_metrics']
+    
+    return model, optim, best_metrics
 
 
 def epoch_step(model, loaders, device, optim, writer, epoch):
@@ -198,6 +210,10 @@ def main():
     # model saving initialization
     best_metrics = {'cer': {'train': np.inf, 'valid': np.inf},
                     'loss': {'train': np.inf, 'valid': np.inf}}
+
+    # continue training if needed    
+    if args.ckpt_path is not None:
+        model, optim, best_metrics = load_model(args.ckpt_path, model, optim, device)
 
     ep = 1
     while ep != args.epochs + 1:
