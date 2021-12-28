@@ -61,6 +61,32 @@ def main():
             
             line = img[upper_border:lower_border, left_border:right_border]
             
+            # check aspect ratio
+            diff = line.shape[0] - line.shape[1]
+            if diff >= 0:
+                cv2.namedWindow('img', cv2.WINDOW_NORMAL)
+                cv2.imshow('img', line)
+                cv2.waitKey()
+                
+                choice = None
+                while choice not in ['1', '2']:
+                    print('1 - cut')
+                    print('2 - pad reflective')
+                    choice = input()
+                
+                print('Shape before:', line.shape)
+                if choice == '1':
+                    cut_size = (diff + 10)
+                    line = line[cut_size:]
+                else:
+                    line = cv2.copyMakeBorder(line, 0, 0, 0, diff + 1,
+                                              cv2.BORDER_REPLICATE)
+                
+                print('Shape after:', line.shape)
+                cv2.imshow('img', line)
+                cv2.waitKey()
+                cv2.destroyWindow('img')
+            
             # saving
             dir_name = xml_path.stem.split('-')[0]
             save_dir = args.save_to.joinpath(dir_name).joinpath(xml_path.stem)
