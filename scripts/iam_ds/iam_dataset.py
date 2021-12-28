@@ -12,7 +12,8 @@ from pathlib import Path
 from torch.utils.data import Dataset
 from xml.etree import ElementTree as ET
 
-from .transforms import SkewCorrection, SlantCorrection, ContrastNormalization
+# from .transforms import SkewCorrection, SlantCorrection, ContrastNormalization
+from transforms import SkewCorrection, SlantCorrection, ContrastNormalization
 
 
 class IAMDataset(Dataset):
@@ -23,6 +24,7 @@ class IAMDataset(Dataset):
                  split_filepath,
                  i2c,
                  height=64,
+                 width=None,
                  max_len=300,
                  augment=False):
         """Initialize IAM dataset.
@@ -39,6 +41,9 @@ class IAMDataset(Dataset):
             Model's converter from index to character.
         height : int
             Target height for images.
+        width : int
+            Pad all image to this width. Must greater or equal to the maximal 
+            width in the dataset.
         max_len : int
             Maximal length for text sequence.
         augment : bool
@@ -49,6 +54,7 @@ class IAMDataset(Dataset):
         self.c2i = {c: idx for idx, c in enumerate(self.i2c)}
 
         self.height = height
+        self.width = width
         self.max_len = max_len
         self.augment = augment
 
@@ -99,6 +105,12 @@ class IAMDataset(Dataset):
         img = cv2.imread(str(img_path), cv2.IMREAD_GRAYSCALE)
 
         img = self.transform(image=img)['image']
+        if self.width is not None:
+            assert self.width >= img.shape[-1], \
+                'padding width is lower than actual image width'
+            img = cv2.copyMakeBorder(img, 0, 0, 0, self.width - img.shape[-1],
+                                     cv2.BORDER_REPLICATE)
+        
         img = (torch.tensor(img).unsqueeze(0) / 255.0)
 
         text = self.markup[idx]

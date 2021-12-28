@@ -51,6 +51,11 @@ def get_args():
                         help='Number of data loader workers.')
     parser.add_argument('--augment', action='store_true',
                         help='Augment images.')
+    parser.add_argument('--text-max-len', type=int, default=98,
+                        help='Max length of text.')
+    parser.add_argument('--img-max-width', type=int, default=1408,
+                        help='Max width of images. '
+                             'Needed for stable validation process.')
 
     # model
     parser.add_argument('--height', type=int, default=64,
@@ -181,16 +186,17 @@ def main():
 
     # datasets
     c2i, i2c = build_alphabet(light=False, with_ctc_blank=False, with_sos=True)
-    text_max_len = 98
     ds_args = {'images_dir': args.images_dir,
                'markup_dir': args.mkp_dir,
                'height': args.height,
                'i2c': i2c,
-               'max_len': text_max_len}
+               'max_len': args.text_max_len}
     ds_train = IAMDataset(split_filepath=args.train_split,
                           augment=args.augment,
                           **ds_args)
-    ds_valid = IAMDataset(split_filepath=args.valid_split, **ds_args)
+    ds_valid = IAMDataset(split_filepath=args.valid_split,
+                          width=args.img_max_width,
+                          **ds_args)
 
     dl_args = {'batch_size': args.bs,
                'num_workers': args.workers,

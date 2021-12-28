@@ -51,6 +51,11 @@ def get_args():
                         help='Input image height. Will resize to this value.')
     parser.add_argument('--augment', action='store_true',
                         help='Augment images.')
+    parser.add_argument('--text-max-len', type=int, default=98,
+                        help='Max length of text.')
+    parser.add_argument('--img-max-width', type=int, default=1408,
+                        help='Max width of images. '
+                             'Needed for stable validation process.')
 
     parser.add_argument('--save-to', type=Path,
                         help='Path to save dir.')
@@ -102,7 +107,7 @@ def epoch_step(model, loaders, device, optim):
 
             # cer
             gt_text = loaders[stage].dataset.tensor2text(text)
-            pd_beam, pd_lens = model.decode(log_probs)
+            pd_beam, _ = model.decode(log_probs)
             pd_beam = loaders[stage].dataset.tensor2text(pd_beam)
 
             gt_lens = lens.detach().cpu().numpy()
@@ -155,16 +160,17 @@ def main():
     optim = torch.optim.Adam(params=model.parameters(), lr=args.lr)
 
     # datasets
-    text_max_len = 98
     ds_args = {'images_dir': args.images_dir,
                'markup_dir': args.mkp_dir,
                'height': args.height,
                'i2c': i2c,
-               'max_len': text_max_len}
+               'max_len': args.text_max_len}
     ds_train = IAMDataset(split_filepath=args.train_split,
                           augment=args.augment,
                           **ds_args)
-    ds_valid = IAMDataset(split_filepath=args.valid_split, **ds_args)
+    ds_valid = IAMDataset(split_filepath=args.valid_split,
+                          width=args.img_max_width,
+                          **ds_args)
 
     dl_args = {'batch_size': args.bs,
                'num_workers': args.workers,
