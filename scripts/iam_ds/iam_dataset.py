@@ -64,7 +64,7 @@ class IAMDataset(Dataset):
         if self.augment:
             self.transform = albu.Compose([
                 albu.CropAndPad([[12, 20], [24, 40], [12, 20], [24, 40]],
-                                pad_cval=255,
+                                pad_mode=cv2.BORDER_REPLICATE,
                                 keep_size=False),
                 albu.GaussianBlur(3, 3, p=0.4),
                 albu.Affine(scale=[0.9, 1.0],
@@ -83,7 +83,7 @@ class IAMDataset(Dataset):
         else:
             self.transform = albu.Compose([
                 albu.CropAndPad([16, 32, 16, 32],
-                                pad_cval=255,
+                                pad_mode=cv2.BORDER_REPLICATE,
                                 keep_size=False),
                 albu.SmallestMaxSize(self.height),
                 SkewCorrection(p=1),
@@ -139,14 +139,14 @@ class IAMDataset(Dataset):
         return markup, lens
 
     @staticmethod
-    def collate_fn(batch, pad_value=1):
+    def collate_fn(batch):
         texts = torch.stack([x[1] for x in batch])
         lens = torch.stack([x[2] for x in batch])
 
         images = [x[0] for x in batch]
         widths = [x.size(2) for x in images]
         max_width = torch.max(torch.tensor(widths)).long()
-        images = [F.pad(x, (0, max_width - x.size(2)), 'constant', pad_value)
+        images = [F.pad(x, (0, max_width - x.size(2)), 'replicate')
                   for x in images]
 
         return torch.stack(images), texts, lens
