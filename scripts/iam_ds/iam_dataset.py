@@ -76,9 +76,9 @@ class IAMDataset(Dataset):
                 albu.CLAHE(),
                 albu.Emboss(),
                 albu.RandomBrightnessContrast(),
-                SkewCorrection(),
-                SlantCorrection(),
-                ContrastNormalization()
+                SkewCorrection(p=1),
+                SlantCorrection(p=1),
+                ContrastNormalization(p=1)
             ])
         else:
             self.transform = albu.Compose([
@@ -86,9 +86,9 @@ class IAMDataset(Dataset):
                                 pad_cval=255,
                                 keep_size=False),
                 albu.SmallestMaxSize(self.height),
-                SkewCorrection(),
-                SlantCorrection(),
-                ContrastNormalization()
+                SkewCorrection(p=1),
+                SlantCorrection(p=1),
+                ContrastNormalization(p=1)
             ])
 
     def __len__(self):
