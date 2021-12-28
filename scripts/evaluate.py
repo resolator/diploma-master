@@ -6,22 +6,26 @@ import argparse
 
 from tqdm import tqdm
 from pathlib import Path
-from utils import create_model, calc_cer
+from pprint import pprint
+from common.utils import create_model, calc_cer
 from torch.utils.data import DataLoader
-from printed_dataset import PrintedDataset
+from iam_ds.iam_dataset import IAMDataset
 
 
 def get_args():
     """Arguments parser."""
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--ds-dir', type=Path, required=True,
-                        help='Path to dataset directort.')
+    parser.add_argument('--images-dir', type=Path, required=True,
+                        help='Path to root dir with images (ex. iam/lines/).')
+    parser.add_argument('--mkp-dir', type=Path, required=True,
+                        help='Path to dir with xml files (ex. iam/xml).')
+    parser.add_argument('--split', type=Path, required=True,
+                        help='Path to split file. Can be generated '
+                             'using scripts/utils/gen_split_file.py.')
     parser.add_argument('--model-path', type=Path, required=True,
                         help='Path to the trained model.')
     parser.add_argument('--bs', type=int, default=64,
                         help='Batch size.')
-    parser.add_argument('--save-to', type=Path,
-                        help='Path to save dir.')
 
     return parser.parse_args()
 
@@ -35,6 +39,7 @@ def main():
     if torch.cuda.is_available():
         device = torch.device('cuda')
 
+    print('Checkpoint loading')
     ckpt = torch.load(args.model_path, map_location=device)
 
     i2c = ckpt['i2c']
@@ -43,32 +48,33 @@ def main():
     model = create_model(c2i, i2c).to(device)
     model.load_state_dict(ckpt['model'])
     model.eval()
+    
+    print('This model metrics:')
+    pprint(ckpt['metrics'])
 
-    # create dataset
-    text_max_len = 62
-    ds = PrintedDataset(args.ds_dir, c2i, i2c, text_max_len=text_max_len)
-    dl = DataLoader(ds, args.bs, num_workers=4)
+    print('Creating dataset')
+    text_max_len = 98
+    ds = IAMDataset(args.images_dir, args.mkp_dir, args.split,
+                    i2c, ckpt['args'].height, text_max_len)
+    dl = DataLoader(ds, args.bs, num_workers=4, collate_fn=ds.collate_fn)
 
     # evaluation
-    cer = 0
+    final_cer = 0.0
     loader_size = len(dl)
     for img, text, lens in tqdm(dl, desc='Evaluating'):
         img, text, lens = img.to(device), text.to(device), lens.to(device)
-        logits, log_probs = model(img)
+        _, log_probs = model(img)
 
         # cer
-        pd_beam, pd_lens = model.decode(log_probs)
-
-        pd_beam = ds.tensor2text(pd_beam)
-        gt_text = ds.tensor2text(text)
+        gt_text = dl.dataset.tensor2text(text)
+        pd_beam, _ = model.decode(log_probs)
+        pd_beam = dl.dataset.tensor2text(pd_beam)
 
         gt_lens = lens.detach().cpu().numpy()
         cer = calc_cer(gt_text, pd_beam, gt_lens)
-        if cer > 0:
-            print(cer)
-        cer += cer / loader_size
+        final_cer += cer / loader_size
 
-    print(('Mean CER: %.3f' % cer) + '%')
+    print(('Mean CER: %.3f' % final_cer) + '%')
 
 
 if __name__ == '__main__':
