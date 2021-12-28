@@ -12,7 +12,7 @@ from pathlib import Path
 from torch.utils.data import Dataset
 from xml.etree import ElementTree as ET
 
-import transforms as my_t
+from .transforms import SkewCorrection, SlantCorrection, ContrastNormalization
 
 
 class IAMDataset(Dataset):
@@ -76,20 +76,19 @@ class IAMDataset(Dataset):
                 albu.CLAHE(),
                 albu.Emboss(),
                 albu.RandomBrightnessContrast(),
-                my_t.SkewCorrection(),
-                my_t.SlantCorrection(),
-                my_t.ContrastNormalization()
+                SkewCorrection(),
+                SlantCorrection(),
+                ContrastNormalization()
             ])
         else:
             self.transform = albu.Compose([
                 albu.CropAndPad([16, 32, 16, 32],
                                 pad_cval=255,
-                                keep_size=False,
-                                always_apply=True),
+                                keep_size=False),
                 albu.SmallestMaxSize(self.height),
-                my_t.SkewCorrection(),
-                my_t.SlantCorrection(),
-                my_t.ContrastNormalization()
+                SkewCorrection(),
+                SlantCorrection(),
+                ContrastNormalization()
             ])
 
     def __len__(self):
