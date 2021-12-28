@@ -78,23 +78,23 @@ class IAMDataset(Dataset):
                             cval=255,
                             fit_output=True,
                             p=0.7),
+                albu.SmallestMaxSize(self.height),
                 albu.CLAHE(),
                 albu.Emboss(),
                 albu.RandomBrightnessContrast(),
                 SkewCorrection(p=1),
                 SlantCorrection(p=1),
-                ContrastNormalization(p=1),
-                albu.SmallestMaxSize(self.height),
+                ContrastNormalization(p=1)
             ])
         else:
             self.transform = albu.Compose([
                 albu.CropAndPad([16, 32, 16, 32],
                                 pad_mode=cv2.BORDER_REPLICATE,
                                 keep_size=False),
+                albu.SmallestMaxSize(self.height),
                 SkewCorrection(p=1),
                 SlantCorrection(p=1),
-                ContrastNormalization(p=1),
-                albu.SmallestMaxSize(self.height)
+                ContrastNormalization(p=1)
             ])
 
     def __len__(self):
