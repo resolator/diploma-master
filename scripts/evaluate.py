@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*
 """Evaluation script."""
+import cv2
+import json
 import torch
 import argparse
+import numpy as np
 
 from tqdm import tqdm
 from pathlib import Path
@@ -13,7 +16,7 @@ from iam_ds.iam_dataset import IAMDataset
 
 
 def get_args():
-    """Arguments parser."""
+    """Arguments parser and checker."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--images-dir', type=Path, required=True,
                         help='Path to root dir with images (ex. iam/lines/).')
@@ -26,53 +29,91 @@ def get_args():
                         help='Path to the trained model.')
     parser.add_argument('--bs', type=int, default=64,
                         help='Batch size.')
+    parser.add_argument('--save-errors-to', type=Path,
+                        help='Save errors to this file.'
+                             'In this case bs will be 1.')
 
-    return parser.parse_args()
+    args = parser.parse_args()
+    
+    if args.save_errors_to is not None:
+        print('--save-errors-to passed, bs is set to 1.')
+        args.bs = 1
+        args.save_errors_to.mkdir(exist_ok=True, parents=True)
+    
+    return args
 
 
 def main():
     """Application entry point."""
     args = get_args()
 
-    # model loading
+    print('Checkpoint loading')
     device = torch.device('cpu')
     if torch.cuda.is_available():
         device = torch.device('cuda')
 
-    print('Checkpoint loading')
     ckpt = torch.load(args.model_path, map_location=device)
 
     i2c = ckpt['i2c']
     c2i = {c: idx for idx, c in enumerate(i2c)}
 
-    model = create_model(c2i, i2c).to(device)
+    print('Creating dataset')
+    text_max_len = 98
+    ds = IAMDataset(args.images_dir, args.mkp_dir, args.split,
+                    i2c, ckpt['args'].height, text_max_len, False)
+    dl = DataLoader(ds, args.bs, num_workers=4, collate_fn=ds.collate_fn)
+
+    print('Model creation')
+    model_type='ctc'
+    if 'pos_encoding' in ckpt['args']:
+        model_type='seq2seq'
+        model = create_model(c2i,
+                             i2c,
+                             model_type='seq2seq',
+                             text_max_len=ds.max_len,
+                             pe=ckpt['args'].pos_encoding).to(device)
+    else:
+        model = create_model(c2i, i2c, model_type='ctc').to(device)
+    
     model.load_state_dict(ckpt['model'])
     model.eval()
     
     print('This model metrics:')
     pprint(ckpt['metrics'])
 
-    print('Creating dataset')
-    text_max_len = 98
-    ds = IAMDataset(args.images_dir, args.mkp_dir, args.split,
-                    i2c, ckpt['args'].height, text_max_len)
-    dl = DataLoader(ds, args.bs, num_workers=4, collate_fn=ds.collate_fn)
-
     # evaluation
     final_cer = 0.0
     loader_size = len(dl)
-    for img, text, lens in tqdm(dl, desc='Evaluating'):
+    errors = {}
+    for idx, (img, text, lens) in enumerate(tqdm(dl, desc='Evaluating')):
         img, text, lens = img.to(device), text.to(device), lens.to(device)
-        _, log_probs = model(img)
+        
+        if model_type == 'ctc':
+            _, log_probs = model(img)
+            pd_text, _ = model.decode(log_probs)
+            pd_text = ds.tensor2text(pd_text)
+        else:
+            log_probs, preds, _ = model(img)
+            pd_text = ds.tensor2text(preds)
 
         # cer
-        gt_text = dl.dataset.tensor2text(text)
-        pd_beam, _ = model.decode(log_probs)
-        pd_beam = dl.dataset.tensor2text(pd_beam)
-
+        gt_text = ds.tensor2text(text)
         gt_lens = lens.detach().cpu().numpy()
-        cer = calc_cer(gt_text, pd_beam, gt_lens)
+        cer = calc_cer(gt_text, pd_text, gt_lens)
         final_cer += cer / loader_size
+        
+        # save errors
+        if (args.save_errors_to is not None) and cer > 0:
+            img_name = str(idx) + '.png'
+            errors[img_name] = ({'gt': gt_text[0][:gt_lens[0]],
+                                 'pd': pd_text[0][:gt_lens[0]]})
+            img_path = args.save_errors_to.joinpath(img_name)
+            img = (img.squeeze() * 255).cpu().numpy().astype(np.uint8)
+            cv2.imwrite(str(img_path), img)
+    
+    if args.save_errors_to is not None:
+        with open(args.save_errors_to.joinpath('errors.json'), 'w') as f:
+            json.dump(errors, fp=f, indent=4)
 
     print(('Mean CER: %.3f' % final_cer) + '%')
 
