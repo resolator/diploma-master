@@ -126,6 +126,7 @@ class IAMDataset(Dataset):
             for line in lines:
                 line_id = line.attrib['id']
                 line_text = line.attrib['text']
+                line_text = IAMDataset.html_decode(line_text)
 
                 # convert text to tensor with padding
                 line_tensor = torch.tensor([self.c2i[x] for x in line_text],
@@ -149,6 +150,18 @@ class IAMDataset(Dataset):
             lens.append(markup_dict[img_path.stem][1])
 
         return markup, lens
+
+    @staticmethod
+    def html_decode(line):
+        """Decode HTML tags from markup text."""
+        htmlCodes = (("'", '&#39;'),
+                     ('"', '&quot;'),
+                     ('&', '&amp;'))
+        
+        for code in htmlCodes:
+            line = line.replace(code[1], code[0])
+        
+        return line
 
     @staticmethod
     def collate_fn(batch):
