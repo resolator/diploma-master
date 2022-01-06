@@ -69,7 +69,8 @@ def save_model(model, optim, args, ep, metrics, best_metrics, models_dir):
                  'optim': optim.state_dict(),
                  'args': args,
                  'epoch': ep,
-                 'valid_metrics': metrics,
+                 'metrics': metrics,
+                 'best_metrics': best_metrics,
                  'i2c': model.i2c}
 
     for m in metrics.keys():

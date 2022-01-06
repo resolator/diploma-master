@@ -59,8 +59,14 @@ def main():
 
     print('Creating dataset')
     text_max_len = 98
-    ds = IAMDataset(args.images_dir, args.mkp_dir, args.split,
-                    i2c, ckpt['args'].height, text_max_len, False)
+    ds = IAMDataset(images_dir=args.images_dir,
+                    markup_dir=args.mkp_dir,
+                    split_filepath=args.split,
+                    i2c=i2c,
+                    height=ckpt['args'].height,
+                    width=getattr(ckpt['args'], 'img_max_width'),
+                    max_len=text_max_len,
+                    augment=False)
     dl = DataLoader(ds, args.bs, num_workers=4, collate_fn=ds.collate_fn)
 
     print('Model creation')
