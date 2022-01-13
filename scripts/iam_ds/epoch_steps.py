@@ -99,7 +99,7 @@ def epoch_step_seq2seq(model, loaders, device, optim, writer, epoch):
 
             # forward
             img, text, lens = img.to(device), text.to(device), lens.to(device)
-            logs_probs, preds, atts = model(img)
+            logs_probs, preds, atts = model(img, text)
 
             # loss
             loss = model.calc_loss(logs_probs, text, lens)
