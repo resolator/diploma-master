@@ -66,14 +66,14 @@ def get_args():
 
     # add baseline args
     subparsers = parser.add_subparsers()
-    baseline = subparsers.add_parser('baseline')
+    baseline = subparsers.add_parser('baseline-args')
     baseline.add_argument('--config-baseline', is_config_file=True,
                           help='Path to baseline config file.')
     baseline.add_argument('--n-layers', type=int, default=2,
                           help='Number of RNN layers.')
 
     # add seq2seq args
-    seq2seq = subparsers.add_parser('seq2seq')
+    seq2seq = subparsers.add_parser('seq2seq-args')
     seq2seq.add_argument('--config-seq2seq', is_config_file=True,
                         help='Path to seq2seq config file.')
     seq2seq.add_argument('--pos-encoding', action='store_true',
