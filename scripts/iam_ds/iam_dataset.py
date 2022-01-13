@@ -106,10 +106,12 @@ class IAMDataset(Dataset):
 
         img = self.transform(image=img)['image']
         if self.width is not None:
-            assert self.width >= img.shape[-1], \
-                'padding width is lower than actual image width'
-            img = cv2.copyMakeBorder(img, 0, 0, 0, self.width - img.shape[-1],
-                                     cv2.BORDER_REPLICATE)
+            if self.width < img.shape[-1]:
+                print('WARNING: padding width is lower than actual image width')
+            else:
+                img = cv2.copyMakeBorder(img, 0, 0, 0,
+                                         self.width - img.shape[-1],
+                                         cv2.BORDER_REPLICATE)
         
         img = (torch.tensor(img).unsqueeze(0) / 255.0)
 
