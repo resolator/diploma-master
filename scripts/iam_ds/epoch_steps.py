@@ -13,6 +13,13 @@ sys.path.append(str(Path(sys.path[0]).parent))
 from common.utils import calc_cer
 
 
+def get_epoch_step_fn(model_type='baseline'):
+    if model_type == 'seq2seq':
+        return epoch_step_seq2seq
+    else:
+        return epoch_step_baseline
+
+
 def get_metrics_dict(model_type='baseline', init_value=0.0):
     if model_type == 'seq2seq':
         return {'cer': {'train': init_value, 'valid': init_value},

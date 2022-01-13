@@ -42,7 +42,7 @@ class IAMDataset(Dataset):
         height : int
             Target height for images.
         width : int
-            Pad all image to this width. Must greater or equal to the maximal 
+            Pad all image to this width. Must greater or equal to the maximal
             width in the dataset.
         max_len : int
             Maximal length for text sequence.
@@ -112,7 +112,7 @@ class IAMDataset(Dataset):
                 img = cv2.copyMakeBorder(img, 0, 0, 0,
                                          self.width - img.shape[-1],
                                          cv2.BORDER_REPLICATE)
-        
+
         img = (torch.tensor(img).unsqueeze(0) / 255.0)
 
         text = self.markup[idx]
@@ -159,10 +159,10 @@ class IAMDataset(Dataset):
         htmlCodes = (("'", '&#39;'),
                      ('"', '&quot;'),
                      ('&', '&amp;'))
-        
+
         for code in htmlCodes:
             line = line.replace(code[1], code[0])
-        
+
         return line
 
     @staticmethod

@@ -53,7 +53,7 @@ class Seq2seqModel(nn.Module):
 
         loss = torch.mean(loss[mask])
 
-        return loss# BS, C, W
+        return loss
 
     def forward(self, x, target_seq=None):
         y = self.fe(x)

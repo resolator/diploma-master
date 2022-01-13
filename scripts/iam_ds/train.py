@@ -12,8 +12,8 @@ from pprint import pprint
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 
-import epoch_steps as es
 from iam_dataset import IAMDataset
+from epoch_steps import get_epoch_step_fn, get_metrics_dict
 
 sys.path.append(str(Path(sys.path[0]).parent))
 from common.utils import build_alphabet, create_model
@@ -145,16 +145,15 @@ def main():
         device = torch.device('cuda')
 
     if args.model_type == 'seq2seq':
-        epoch_step = es.epoch_step_seq2seq
         c2i, i2c = build_alphabet(light=False,
                                   with_ctc_blank=False,
                                   with_sos=True)
     else:
-        epoch_step = es.epoch_step_baseline
         c2i, i2c = build_alphabet(light=False,
                                   with_ctc_blank=True,
                                   with_sos=False)
 
+    epoch_step = get_epoch_step_fn(args.model_type)
     model = create_model(c2i, i2c, args=args).to(device)
     optim = torch.optim.Adam(params=model.parameters(), lr=args.lr)
 
@@ -180,8 +179,8 @@ def main():
                                    collate_fn=ds_valid.collate_fn, **dl_args)}
 
     # model saving initialization
-    best_metrics = es.get_metrics_dict(model_type=args.model_type,
-                                       init_value=np.inf)
+    best_metrics = get_metrics_dict(model_type=args.model_type,
+                                    init_value=np.inf)
 
     # continue training if needed
     if args.ckpt_path is not None:
