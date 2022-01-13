@@ -25,15 +25,28 @@ def build_alphabet(light=True, with_ctc_blank=True, with_sos=False):
     return c2i, i2c
 
 
-def create_model(c2i, i2c, model_type='ctc', text_max_len=62, pe=False):
+def create_model(c2i, i2c, args):
     """Wrapper for creating different models."""
 
-    if model_type == 'ctc':
-        model = BaselineNet(c2i, i2c)
-    elif model_type == 'seq2seq':
-        model = Seq2seqModel(i2c, text_max_len, pe=pe)
+    if args.model_type == 'baseline':
+        model = BaselineNet(c2i, i2c, args.n_layers)
+    elif args.model_type == 'seq2seq':
+        model = Seq2seqModel(c2i=c2i,
+                             i2c=i2c,
+                             text_max_len=args.text_max_len,
+                             enc_hs=args.enc_hs,
+                             dec_hs=args.dec_hs,
+                             emb_size=args.emb_size,
+                             enc_n_layers=args.enc_layers,
+                             dec_n_layers=args.dec_layers,
+                             pe=args.pos_encoding,
+                             teacher_rate=args.teacher_rate)
+    elif args.model_type == 'seg_attn':
+        raise NotImplementedError()
     else:
-        raise AssertionError('model type must be "ctc" or "seq2seq"')
+        raise AssertionError(
+            'model type must be in [baseline, seq2seq, seg_attn]'
+        )
 
     return model
 

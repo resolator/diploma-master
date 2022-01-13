@@ -9,6 +9,7 @@ from torch.nn import functional as F
 
 class Seq2seqModel(nn.Module):
     def __init__(self,
+                 c2i,
                  i2c,
                  text_max_len,
                  enc_hs=128,
@@ -21,7 +22,7 @@ class Seq2seqModel(nn.Module):
                  teacher_rate=0.9):
         super().__init__()
         self.i2c = i2c
-        self.c2i = {c: idx for idx, c in enumerate(i2c)}
+        self.c2i = c2i
         sos_idx = self.c2i['ś']
         alpb_size = len(self.i2c)
 

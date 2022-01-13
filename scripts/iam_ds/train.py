@@ -7,16 +7,16 @@ import configargparse
 
 import numpy as np
 
-from tqdm import tqdm
 from pathlib import Path
 from pprint import pprint
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 
+import epoch_steps as es
 from iam_dataset import IAMDataset
 
 sys.path.append(str(Path(sys.path[0]).parent))
-from common.utils import build_alphabet, create_model, calc_cer
+from common.utils import build_alphabet, create_model
 
 
 def get_args():
@@ -26,6 +26,11 @@ def get_args():
                         help='Path to config file.')
 
     # dataset
+    parser.add_argument('--model-type', required=True,
+                        choices=['baseline', 'seq2seq', 'seg_attn'],
+                        help='Model type to train.')
+    parser.add_argument('--ckpt-path', type=Path,
+                        help='Path to saved model to load for training.')
     parser.add_argument('--images-dir', type=Path, required=True,
                         help='Path to root dir with images (ex. iam/lines/).')
     parser.add_argument('--mkp-dir', type=Path, required=True,
@@ -36,10 +41,7 @@ def get_args():
     parser.add_argument('--valid-split', type=Path, required=True,
                         help='Path to validation split file. Can be generated '
                              'using scripts/utils/gen_split_file.py.')
-    parser.add_argument('--ckpt-path', type=Path,
-                        help='Path to saved model to load for training.')
 
-    # training
     parser.add_argument('--epochs', type=int, default=-1,
                         help='Number of epochs to train. '
                              'Pass -1 for infinite training.')
@@ -47,36 +49,47 @@ def get_args():
                         help='Batch size.')
     parser.add_argument('--lr', type=float, default=1e-3,
                         help='Learning rate.')
-    parser.add_argument('--workers', type=int, default=2,
+    parser.add_argument('--workers', type=int, default=4,
                         help='Number of data loader workers.')
     parser.add_argument('--augment', action='store_true',
                         help='Augment images.')
     parser.add_argument('--text-max-len', type=int, default=98,
                         help='Max length of text.')
+    parser.add_argument('--height', type=int, default=64,
+                        help='Input image height. Will resize to this value.')
     parser.add_argument('--img-max-width', type=int, default=1408,
                         help='Max width of images. '
                              'Needed for stable validation process.')
 
-    # model
-    parser.add_argument('--height', type=int, default=64,
-                        help='Input image height. Will resize to this value.')
-    parser.add_argument('--pos-encoding', action='store_true',
-                        help='Add positional encoding before decoder.')
-    parser.add_argument('--enc-hs', type=int, default=128,
-                        help='(bidirectional) Encoder hidden size.')
-    parser.add_argument('--emb-size', type=int, default=128,
-                        help='Embedding size.')
-    parser.add_argument('--dec-hs', type=int, default=128,
-                        help='Decoder hidden size.')
-    parser.add_argument('--teacher-rate', type=float, default=1.0,
-                        help='Teacher rate for decoder training input.')
-    parser.add_argument('--enc-layers', type=int, default=1,
-                        help='Encoder RNN layers.')
-    parser.add_argument('--dec-layers', type=int, default=1,
-                        help='Decoder RNN layers.')
-
     parser.add_argument('--save-to', type=Path,
                         help='Path to save dir.')
+
+    # add baseline args
+    subparsers = parser.add_subparsers()
+    baseline = subparsers.add_parser('baseline')
+    baseline.add_argument('--config-baseline', is_config_file=True,
+                          help='Path to baseline config file.')
+    baseline.add_argument('--n-layers', type=int, default=2,
+                          help='Number of RNN layers.')
+
+    # add seq2seq args
+    seq2seq = subparsers.add_parser('seq2seq')
+    seq2seq.add_argument('--config-seq2seq', is_config_file=True,
+                        help='Path to seq2seq config file.')
+    seq2seq.add_argument('--pos-encoding', action='store_true',
+                         help='Add positional encoding before decoder.')
+    seq2seq.add_argument('--enc-hs', type=int, default=128,
+                         help='(bidirectional) Encoder hidden size.')
+    seq2seq.add_argument('--emb-size', type=int, default=128,
+                         help='Embedding size.')
+    seq2seq.add_argument('--dec-hs', type=int, default=128,
+                         help='Decoder hidden size.')
+    seq2seq.add_argument('--teacher-rate', type=float, default=1.0,
+                         help='Teacher rate for decoder training input.')
+    seq2seq.add_argument('--enc-layers', type=int, default=1,
+                         help='Encoder RNN layers.')
+    seq2seq.add_argument('--dec-layers', type=int, default=1,
+                         help='Decoder RNN layers.')
 
     return parser.parse_args()
 
@@ -106,69 +119,11 @@ def load_model(ckpt_path, model, optim, device):
     model.load_state_dict(ckpt['model'])
     optim.load_state_dict(ckpt['optim'])
     best_metrics = ckpt['best_metrics']
-    
+
+    print('\nCheckpoint metrics:')
+    pprint(ckpt['metrics'])
+
     return model, optim, best_metrics
-
-
-def epoch_step(model, loaders, device, optim, writer, epoch):
-    metrics = {'cer': {'train': 0.0, 'valid': 0.0},
-               'loss': {'train': 0.0, 'valid': 0.0}}
-
-    for stage in ['train', 'valid']:
-        is_train = stage == 'train'
-        model.train() if is_train else model.eval()
-        loader_size = len(loaders[stage])
-
-        torch.set_grad_enabled(is_train)
-        img_count = 0
-        for i, (img, text, lens) in enumerate(tqdm(loaders[stage], desc=stage)):
-            if is_train:
-                optim.zero_grad()
-
-            # forward
-            img, text, lens = img.to(device), text.to(device), lens.to(device)
-            logs_probs, preds, atts = model(img)
-
-            # loss
-            loss = model.calc_loss(logs_probs, text, lens)
-            metrics['loss'][stage] += loss.item() / loader_size
-
-            # cer
-            gt_text = loaders[stage].dataset.tensor2text(text)
-            gt_lens = lens.detach().cpu().numpy()
-
-            pd_text = loaders[stage].dataset.tensor2text(preds)
-            cer = calc_cer(gt_text, pd_text, gt_lens)
-            metrics['cer'][stage] += cer / loader_size
-
-            # dump attention
-            if i % 15 == 0:
-                att = atts[0]
-                att = att.repeat_interleave(2, -2)
-                att_img = att.detach().unsqueeze(0).cpu().numpy()
-                att_img -= att_img.min()
-                att_img = (att_img / att_img.max() * 255).astype(np.uint8)
-                cur_img = (img[0].cpu().numpy() * 255).astype(np.uint8)
-
-                writer.add_image(stage + '-img-' + str(img_count), cur_img, epoch)
-                writer.add_image(stage + '-att-' + str(img_count), att_img, epoch)
-
-                img_count += 1
-
-            # print
-            if i == 0:
-                gt_text = gt_text[0][:lens[0]]
-                pd_text = loaders[stage].dataset.tensor2text(preds[0][:lens[0]])
-
-                print('\nGT:', gt_text)
-                print('PD:', pd_text)
-
-            # backward
-            if is_train:
-                loss.backward()
-                optim.step()
-
-    return metrics
 
 
 def main():
@@ -184,8 +139,26 @@ def main():
 
     writer = SummaryWriter(logs_dir)
 
+    # model
+    device = torch.device('cpu')
+    if torch.cuda.is_available():
+        device = torch.device('cuda')
+
+    if args.model_type == 'seq2seq':
+        epoch_step = es.epoch_step_seq2seq
+        c2i, i2c = build_alphabet(light=False,
+                                  with_ctc_blank=False,
+                                  with_sos=True)
+    else:
+        epoch_step = es.epoch_step_baseline
+        c2i, i2c = build_alphabet(light=False,
+                                  with_ctc_blank=True,
+                                  with_sos=False)
+
+    model = create_model(c2i, i2c, args=args).to(device)
+    optim = torch.optim.Adam(params=model.parameters(), lr=args.lr)
+
     # datasets
-    c2i, i2c = build_alphabet(light=False, with_ctc_blank=False, with_sos=True)
     ds_args = {'images_dir': args.images_dir,
                'markup_dir': args.mkp_dir,
                'height': args.height,
@@ -205,21 +178,16 @@ def main():
                                    collate_fn=ds_train.collate_fn, **dl_args),
                'valid': DataLoader(ds_valid,
                                    collate_fn=ds_valid.collate_fn, **dl_args)}
-    # model
-    device = torch.device('cpu')
-    if torch.cuda.is_available():
-        device = torch.device('cuda')
-
-    model = create_model(c2i, i2c, 'seq2seq', ds_train.max_len, args.pos_encoding).to(device)
-    optim = torch.optim.Adam(params=model.parameters(), lr=args.lr)
 
     # model saving initialization
-    best_metrics = {'cer': {'train': np.inf, 'valid': np.inf},
-                    'loss': {'train': np.inf, 'valid': np.inf}}
+    best_metrics = es.get_metrics_dict(model_type=args.model_type,
+                                       init_value=np.inf)
 
-    # continue training if needed    
+    # continue training if needed
     if args.ckpt_path is not None:
-        model, optim, best_metrics = load_model(args.ckpt_path, model, optim, device)
+        model, optim, best_metrics = load_model(
+            args.ckpt_path, model, optim, device
+        )
 
     ep = 1
     while ep != args.epochs + 1:

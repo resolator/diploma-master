@@ -10,7 +10,7 @@ from ctcdecode import CTCBeamDecoder
 
 
 class BaselineNet(nn.Module):
-    def __init__(self, c2i, i2c):
+    def __init__(self, c2i, i2c, n_layers=2):
         super().__init__()
 
         self.c2i = c2i
@@ -53,7 +53,7 @@ class BaselineNet(nn.Module):
 
         self.rnn = nn.LSTM(input_size=256,
                            hidden_size=256,
-                           num_layers=2,
+                           num_layers=n_layers,
                            bidirectional=True)
         self.dropout = nn.Dropout(0.15)
         self.conv = nn.Conv2d(512, alpb_size, (1, 1))
