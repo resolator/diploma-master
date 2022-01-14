@@ -179,7 +179,7 @@ class Decoder(nn.Module):
             diff = self.pad_size - enc_out.size(2)
             enc_out = F.pad(enc_out, [0, diff], mode='constant', value=0)
         proj_key = self.attention.key_layer(enc_out)
-        
+
         bs = enc_out.shape[0]
         h, c = self.init_hidden(bs, enc_out.device)
         x = torch.ones(
@@ -251,7 +251,7 @@ class BahdanauAttention(nn.Module):
 class PositionalEncoder(nn.Module):
     def __init__(self, d_model, max_len=512):
         super().__init__()
-        
+
         position = torch.arange(max_len)
         a = torch.arange(0, d_model, 2) * (-np.log(10000.0) / d_model)
         div_term = torch.exp(a).unsqueeze(1)
@@ -259,7 +259,7 @@ class PositionalEncoder(nn.Module):
         pe = torch.zeros(1, d_model, max_len)
         pe[0, 0::2, :] = torch.sin(position * div_term)
         pe[0, 1::2, :] = torch.cos(position * div_term)
-        
+
         self.register_buffer('pe', pe)
 
     def forward(self, x):
