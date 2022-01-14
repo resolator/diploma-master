@@ -4,6 +4,7 @@
 import fastwer
 from .baseline_net import BaselineNet
 from .seq2seq_model import Seq2seqModel
+from .seg_attn_model import SegAttnModel
 from string import digits, ascii_letters
 
 
@@ -42,7 +43,10 @@ def create_model(c2i, i2c, args):
                              pe=args.pos_encoding,
                              teacher_rate=args.teacher_rate)
     elif args.model_type == 'seg_attn':
-        raise NotImplementedError()
+        model = SegAttnModel(c2i=c2i,
+                             i2c=i2c,
+                             text_max_len=args.text_max_len,
+                             backbone_out=256)
     else:
         raise AssertionError(
             'model type must be in [baseline, seq2seq, seg_attn]'

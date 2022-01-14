@@ -29,9 +29,9 @@ class SegAttnModel(nn.Module):
 
     def forward(self, x, target_seq=None):
         fm = self.backbone(x)
-        logits, log_probs, preds = self.decoder(fm, target_seq)
+        log_probs, preds, attentions = self.decoder(fm, target_seq)
 
-        return logits, log_probs, preds
+        return log_probs, preds, attentions
 
     def calc_loss(self, logs_probs, targets, targets_lens):
         loss = self.loss_fn(logs_probs, targets)
@@ -120,10 +120,10 @@ class Decoder(nn.Module):
 
     def forward_step(self, y_emb, h, fm):
         h_attn = h[0]  # (BS, emb_size)
-        z = self.attention(h_attn, fm)  # (BS, emb_size)
+        z, heat_map = self.attention(h_attn, fm)  # (BS, emb_size)
         x = torch.cat([y_emb, z], dim=1)  # BS, 2 * emb_size
 
-        return self.rnn(x, h)  # 2, BS, HS
+        return self.rnn(x, h), heat_map  # 2, BS, HS
 
     def forward(self, fm, target_seq=None):
         bs = fm.size(0)
@@ -134,13 +134,13 @@ class Decoder(nn.Module):
             device=fm.device
         ) * self.sos_idx
 
-        logits, log_probs, preds = [], [], []
+        attentions, log_probs, preds = [], [], []
         for i in range(self.text_max_len):
             y_emb = self.emb(y)  # (BS, 256)
-            h, c = self.forward_step(y_emb, (h, c), fm)
+            (h, c), heat_map = self.forward_step(y_emb, (h, c), fm)
+            attentions.append(heat_map)
 
             step_logits = self.fc(self.dropout(h))
-            logits.append(step_logits)
 
             step_log_probs = F.log_softmax(step_logits, dim=-1)
             log_probs.append(step_log_probs)
@@ -154,12 +154,12 @@ class Decoder(nn.Module):
             else:
                 y = pred
 
-        # BS, C, W
-        # BS, C, W
-        # BS, W
-        return (torch.stack(logits).permute(1, 2, 0),
-                torch.stack(log_probs).permute(1, 2, 0),
-                torch.stack(preds).permute(1, 0))
+        # BS, C, text_max_len
+        # BS, text_max_len
+        # BS, text_max_len, H, W
+        return (torch.stack(log_probs).permute(1, 2, 0),
+                torch.stack(preds).permute(1, 0),
+                torch.stack(attentions).permute(1, 0, 2, 3))
 
     def init_hidden(self, bs, device):
         return torch.zeros(2, bs, self.hs,
@@ -170,7 +170,8 @@ class Attention(nn.Module):
     def __init__(self, h_dec_size, channels, out_size=256):
         super().__init__()
 
-        self.fm_linear = nn.Linear(channels, out_size)
+        # self.fm_linear = nn.Linear(channels, out_size)
+        self.fm_conv = nn.Conv2d(channels, out_size, (1, 1))
         self.h_dec_linear = nn.Linear(h_dec_size, out_size)
 
     def forward(self, h_dec, fm):
@@ -188,25 +189,22 @@ class Attention(nn.Module):
 
         Returns
         -------
-        torch.tensor
-            A context vector of shape (BS, attn_size).
+        (torch.tensor, torch.tensor)
+            A context vector of shape (BS, attn_size) and heat map.
 
         """
         assert len(fm.shape) == 4, "invalid number of shape for fm"
         assert len(h_dec.shape) == 2, "invalid number of shape for h_dec"
 
-        attn_map = torch.zeros(fm.size(0), fm.size(2), fm.size(3))
-        weighted_h_dec = self.h_dec_linear(h_dec).unsqueeze(1)
+        attn_map = torch.zeros(fm.size(0), fm.size(2), fm.size(3),
+                               device=fm.device)
+        weighted_h_dec = self.h_dec_linear(h_dec).unsqueeze(-1).unsqueeze(-1)
+        weighted_fm = self.fm_conv(fm)
 
-        for h in range(fm.size(2)):
-            for w in range(fm.size(3)):
-                weighted_fm = self.fm_linear(fm[:, :, h, w]).unsqueeze(2)
-                attn_map[:, h, w] = torch.bmm(weighted_h_dec,
-                                              weighted_fm).squeeze()
-
-        normed_map = F.softmax(attn_map.flatten(1),
+        attn_map = (weighted_fm * weighted_h_dec).sum(dim=1)
+        heat_map = F.softmax(attn_map.flatten(1),
                                dim=1).reshape(attn_map.shape)
 
-        attn = fm * normed_map.unsqueeze(1)
+        attn = fm * heat_map.unsqueeze(1)
 
-        return attn.sum(dim=[2, 3])
+        return attn.sum(dim=[2, 3]), heat_map

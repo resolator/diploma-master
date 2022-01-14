@@ -144,7 +144,7 @@ def main():
     if torch.cuda.is_available():
         device = torch.device('cuda')
 
-    if args.model_type == 'seq2seq':
+    if args.model_type in ['seq2seq', 'seg_attn']:
         c2i, i2c = build_alphabet(light=False,
                                   with_ctc_blank=False,
                                   with_sos=True)
