@@ -46,7 +46,8 @@ def create_model(c2i, i2c, args):
         model = SegAttnModel(c2i=c2i,
                              i2c=i2c,
                              text_max_len=args.text_max_len,
-                             backbone_out=256)
+                             backbone_out=256,
+                             dropout=args.dropout)
     else:
         raise AssertionError(
             'model type must be in [baseline, seq2seq, seg_attn]'

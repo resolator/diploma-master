@@ -11,21 +11,24 @@ class SegAttnModel(nn.Module):
                  c2i,
                  i2c,
                  text_max_len=98,
-                 backbone_out=256):
+                 backbone_out=256,
+                 dropout=0.15):
         super().__init__()
 
         self.c2i = c2i
         self.i2c = i2c
+        self.sos_idx = self.c2i['ś']
 
         self.backbone_out = backbone_out
         self.backbone = FeatureExtractor(out_channels=self.backbone_out)
         self.decoder = Decoder(c2i=c2i,
                                i2c=i2c,
                                x_size=self.backbone_out,
+                               sos_idx=self.sos_idx,
+                               dropout=dropout,
                                text_max_len=text_max_len)
 
-        sos_idx = self.c2i['ś']
-        self.loss_fn = nn.NLLLoss(reduction='none', ignore_index=sos_idx)
+        self.loss_fn = nn.NLLLoss(reduction='none', ignore_index=self.sos_idx)
 
     def forward(self, x, target_seq=None):
         fm = self.backbone(x)
@@ -101,6 +104,11 @@ class Decoder(nn.Module):
                  sos_idx=1,
                  text_max_len=98):
         super().__init__()
+        print('========== Decoder args ==========')
+        print('x_size: {}; h_size: {}; emb_size: {}; dropout: {}; '
+              'text_max_len: {};'.format(
+            x_size, h_size, emb_size, dropout, text_max_len
+        ))
 
         self.text_max_len = text_max_len
         self.c2i = c2i
@@ -112,7 +120,10 @@ class Decoder(nn.Module):
         self.hs = h_size
 
         self.emb = nn.Embedding(alpb_size, emb_size)
-        self.attention = Attention(h_size, x_size, emb_size)
+        self.attention = Attention(h_dec_size=h_size,
+                                   channels=x_size,
+                                   out_size=emb_size,
+                                   dropout=dropout)
         self.rnn = nn.LSTMCell(input_size=emb_size + x_size,
                                hidden_size=self.hs)
         self.dropout = nn.Dropout(dropout)
@@ -167,12 +178,18 @@ class Decoder(nn.Module):
 
 
 class Attention(nn.Module):
-    def __init__(self, h_dec_size, channels, out_size=256):
+    def __init__(self, h_dec_size, channels, out_size=256, dropout=0.15):
         super().__init__()
+        print('========== Attention args ==========')
+        print('h_dec_size: {}; channels: {}; out_size: {}; dropout: {};'.format(
+            h_dec_size, channels, out_size, dropout
+        ))
 
-        # self.fm_linear = nn.Linear(channels, out_size)
         self.fm_conv = nn.Conv2d(channels, out_size, (1, 1))
+        self.fm_dropout = nn.Dropout(dropout)
+
         self.h_dec_linear = nn.Linear(h_dec_size, out_size)
+        self.h_dec_dropout = nn.Dropout(dropout)
 
     def forward(self, h_dec, fm):
         """Forward pass.
@@ -198,13 +215,16 @@ class Attention(nn.Module):
 
         attn_map = torch.zeros(fm.size(0), fm.size(2), fm.size(3),
                                device=fm.device)
-        weighted_h_dec = self.h_dec_linear(h_dec).unsqueeze(-1).unsqueeze(-1)
-        weighted_fm = self.fm_conv(fm)
+        weighted_h_dec = self.h_dec_dropout(
+            self.h_dec_linear(h_dec)
+        ).unsqueeze(-1).unsqueeze(-1)
+        weighted_fm = self.fm_dropout(self.fm_conv(fm))
 
         attn_map = (weighted_fm * weighted_h_dec).sum(dim=1)
         heat_map = F.softmax(attn_map.flatten(1),
                                dim=1).reshape(attn_map.shape)
 
         attn = fm * heat_map.unsqueeze(1)
+        context = attn.sum(dim=[2, 3])
 
-        return attn.sum(dim=[2, 3]), heat_map
+        return context, heat_map
