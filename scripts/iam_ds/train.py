@@ -92,7 +92,7 @@ def get_args():
                          help='Decoder RNN layers.')
 
     # add seg_attn args
-    seg_attn = subparsers.add_parser('seg-attn')
+    seg_attn = subparsers.add_parser('seg-attn-args')
     seg_attn.add_argument('--config-seg-attn', is_config_file=True,
                           help='Path to seg_attn config file.')
     seg_attn.add_argument('--dropout', type=float, default=0.15,
