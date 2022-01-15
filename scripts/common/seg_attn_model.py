@@ -12,7 +12,8 @@ class SegAttnModel(nn.Module):
                  i2c,
                  text_max_len=98,
                  backbone_out=256,
-                 dropout=0.15):
+                 dropout=0.15,
+                 teacher_rate=1.0):
         super().__init__()
 
         self.c2i = c2i
@@ -26,7 +27,8 @@ class SegAttnModel(nn.Module):
                                x_size=self.backbone_out,
                                sos_idx=self.sos_idx,
                                dropout=dropout,
-                               text_max_len=text_max_len)
+                               text_max_len=text_max_len,
+                               teacher_rate=teacher_rate)
 
         self.loss_fn = nn.NLLLoss(reduction='none', ignore_index=self.sos_idx)
 
@@ -102,14 +104,16 @@ class Decoder(nn.Module):
                  emb_size=256,
                  dropout=0.15,
                  sos_idx=1,
-                 text_max_len=98):
+                 text_max_len=98,
+                 teacher_rate=1.0):
         super().__init__()
         print('========== Decoder args ==========')
-        print('x_size: {}; h_size: {}; emb_size: {}; dropout: {}; '
+        print('x_size: {}; h_size: {}; emb_size: {}; dropout: {}; tr: {} '
               'text_max_len: {};'.format(
-            x_size, h_size, emb_size, dropout, text_max_len
+            x_size, h_size, emb_size, dropout, teacher_rate, text_max_len
         ))
 
+        self.teacher_rate = teacher_rate
         self.text_max_len = text_max_len
         self.c2i = c2i
         self.i2c = i2c
@@ -160,7 +164,8 @@ class Decoder(nn.Module):
             preds.append(pred)
 
             # select next input
-            if (target_seq is not None) and self.training:
+            teach = torch.rand(1)[0].item() < self.teacher_rate
+            if (target_seq is not None) and self.training and teach:
                 y = target_seq[:, i]
             else:
                 y = pred

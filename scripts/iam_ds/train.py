@@ -97,6 +97,8 @@ def get_args():
                           help='Path to seg_attn config file.')
     seg_attn.add_argument('--dropout', type=float, default=0.15,
                           help='Dropout probability.')
+    seg_attn.add_argument('--teacher-rate', type=float, default=1.0,
+                          help='Teacher rate for decoder training input.')
 
     return parser.parse_args()
 
