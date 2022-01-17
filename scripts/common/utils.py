@@ -50,7 +50,8 @@ def create_model(c2i, i2c, args):
                              dec_dropout=args.dec_dropout,
                              teacher_rate=args.teacher_rate,
                              decoder_type=args.decoder_type,
-                             fe_dropout=args.fe_dropout)
+                             fe_dropout=args.fe_dropout,
+                             emb_size=args.emb_size)
     else:
         raise AssertionError(
             'model type must be in [baseline, seq2seq, seg_attn]'

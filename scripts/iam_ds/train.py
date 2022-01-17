@@ -104,6 +104,8 @@ def get_args():
     seg_attn.add_argument('--decoder-type', default='attn_rnn',
                           choices=['attn_rnn', 'attn_fc'],
                           help='Decoder type.')
+    seg_attn.add_argument('--emb-size', type=int, default=256,
+                          help='Embedding size.')
 
     return parser.parse_args()
 

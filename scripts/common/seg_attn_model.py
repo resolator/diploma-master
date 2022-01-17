@@ -15,7 +15,8 @@ class SegAttnModel(nn.Module):
                  dec_dropout=0.15,
                  teacher_rate=1.0,
                  decoder_type='attn_rnn',
-                 fe_dropout=0.0):
+                 fe_dropout=0.0,
+                 emb_size=256):
         super().__init__()
 
         self.c2i = c2i
@@ -31,7 +32,8 @@ class SegAttnModel(nn.Module):
                         'sos_idx': self.sos_idx,
                         'dropout': dec_dropout,
                         'text_max_len': text_max_len,
-                        'teacher_rate': teacher_rate}
+                        'teacher_rate': teacher_rate,
+                        'emb_size': emb_size}
 
         if decoder_type == 'attn_rnn':
             self.decoder = AttnRNNDecoder(**decoder_args)
@@ -134,16 +136,17 @@ class AttnRNNDecoder(nn.Module):
         self.sos_idx = sos_idx
 
         self.n_layers = 1
-        self.hs = h_size
+        attn_size = 256
+        self.hs = emb_size + attn_size
 
         self.emb = nn.Embedding(alpb_size, emb_size)
-        self.attention = Attention(h_dec_size=h_size,
+        self.attention = Attention(h_dec_size=self.hs,
                                    channels=x_size,
-                                   out_size=emb_size)
+                                   out_size=attn_size)
         self.rnn = nn.LSTMCell(input_size=emb_size + x_size,
                                hidden_size=self.hs)
         self.dropout = nn.Dropout(dropout)
-        self.fc = nn.Linear(h_size, alpb_size)
+        self.fc = nn.Linear(self.hs, alpb_size)
 
     def forward_step(self, y_emb, h, fm):
         h_attn = h[0]  # (BS, emb_size)
