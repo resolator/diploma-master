@@ -95,10 +95,15 @@ def get_args():
     seg_attn = subparsers.add_parser('seg-attn-args')
     seg_attn.add_argument('--config-seg-attn', is_config_file=True,
                           help='Path to seg_attn config file.')
-    seg_attn.add_argument('--dropout', type=float, default=0.15,
-                          help='Dropout probability.')
+    seg_attn.add_argument('--dec-dropout', type=float, default=0.15,
+                          help='Dropout for the Decoder.')
+    seg_attn.add_argument('--fe-dropout', type=float, default=0.0,
+                          help='Dropout for the end of Features Extractor.')
     seg_attn.add_argument('--teacher-rate', type=float, default=1.0,
                           help='Teacher rate for decoder training input.')
+    seg_attn.add_argument('--decoder-type', default='attn_rnn',
+                          choices=['attn_rnn', 'attn_fc'],
+                          help='Decoder type.')
 
     return parser.parse_args()
 

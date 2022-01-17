@@ -63,7 +63,7 @@ def epoch_step_seg_attn(model, loaders, device, optim, writer, epoch):
             metrics['cer'][stage] += cer / loader_size
 
             # dump attention
-            if i % 15 == 0:
+            if i % 50 == 0:
                 att = atts[0].squeeze(1)
                 att = att.repeat_interleave(2, -2)
                 att_img = att.detach().unsqueeze(0).cpu().numpy()

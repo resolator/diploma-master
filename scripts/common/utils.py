@@ -47,8 +47,10 @@ def create_model(c2i, i2c, args):
                              i2c=i2c,
                              text_max_len=args.text_max_len,
                              backbone_out=256,
-                             dropout=args.dropout,
-                             teacher_rate=args.teacher_rate)
+                             dec_dropout=args.dec_dropout,
+                             teacher_rate=args.teacher_rate,
+                             decoder_type=args.decoder_type,
+                             fe_dropout=args.fe_dropout)
     else:
         raise AssertionError(
             'model type must be in [baseline, seq2seq, seg_attn]'
