@@ -295,13 +295,9 @@ class Attention(nn.Module):
             h_dec_size, channels, out_size
         ))
 
-        self.h_dec_proc = nn.Sequential(
-            nn.BatchNorm1d(h_dec_size),
-            nn.ReLU(),
-            nn.Linear(h_dec_size, out_size)
-        )
+        self.h_dec_proc = nn.Linear(h_dec_size, out_size)
         self.summed_x_proc = nn.Sequential(
-            nn.Conv2d(channels, out_size, (3, 3), (1, 1), (1, 1)),
+            nn.Conv2d(channels, out_size, (1, 1)),
             nn.BatchNorm2d(out_size),
             nn.ReLU(),
             nn.Conv2d(out_size, out_size // 2, (1, 1)),
