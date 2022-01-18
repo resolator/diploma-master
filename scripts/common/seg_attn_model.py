@@ -297,8 +297,10 @@ class Attention(nn.Module):
 
         self.h_dec_proc = nn.Linear(h_dec_size, channels)
         self.summed_x_proc = nn.Sequential(
-            nn.Tanh(),
-            nn.Conv2d(channels, 1, (1, 1)),
+            nn.Conv2d(channels, out_size, (1, 1)),
+            nn.BatchNorm2d(out_size),
+            nn.ReLU(),
+            nn.Conv2d(out_size, 1, (1, 1))
         )
 
     def forward(self, h_dec, fm):
