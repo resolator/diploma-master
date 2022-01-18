@@ -295,13 +295,10 @@ class Attention(nn.Module):
             h_dec_size, channels, out_size
         ))
 
-        self.h_dec_proc = nn.Linear(h_dec_size, out_size)
+        self.h_dec_proc = nn.Linear(h_dec_size, channels)
         self.summed_x_proc = nn.Sequential(
-            nn.Conv2d(channels, out_size, (1, 1)),
-            nn.BatchNorm2d(out_size),
-            nn.ReLU(),
-            nn.Conv2d(out_size, out_size // 2, (1, 1)),
-            nn.BatchNorm2d(out_size // 2)
+            nn.Tanh(),
+            nn.Conv2d(channels, 1, (1, 1)),
         )
 
     def forward(self, h_dec, fm):
@@ -328,7 +325,7 @@ class Attention(nn.Module):
 
         weighted_h_dec = self.h_dec_proc(h_dec).unsqueeze(-1).unsqueeze(-1)
         summed_x = fm + weighted_h_dec
-        attn_map = self.summed_x_proc(summed_x).sum(dim=1)  # BS, C, 1, W
+        attn_map = self.summed_x_proc(summed_x).squeeze(1)  # BS, H, W
 
         heat_map = F.softmax(attn_map.flatten(1),
                              dim=1).reshape(attn_map.shape)
