@@ -82,14 +82,10 @@ def get_args():
                          help='(bidirectional) Encoder hidden size.')
     seq2seq.add_argument('--emb-size', type=int, default=128,
                          help='Embedding size.')
-    seq2seq.add_argument('--dec-hs', type=int, default=128,
-                         help='Decoder hidden size.')
     seq2seq.add_argument('--teacher-rate', type=float, default=1.0,
                          help='Teacher rate for decoder training input.')
     seq2seq.add_argument('--enc-layers', type=int, default=1,
                          help='Encoder RNN layers.')
-    seq2seq.add_argument('--dec-layers', type=int, default=1,
-                         help='Decoder RNN layers.')
 
     # add seg_attn args
     seg_attn = subparsers.add_parser('seg-attn-args')

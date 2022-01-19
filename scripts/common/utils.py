@@ -36,10 +36,8 @@ def create_model(c2i, i2c, args):
                              i2c=i2c,
                              text_max_len=args.text_max_len,
                              enc_hs=args.enc_hs,
-                             dec_hs=args.dec_hs,
                              emb_size=args.emb_size,
                              enc_n_layers=args.enc_layers,
-                             dec_n_layers=args.dec_layers,
                              pe=args.pos_encoding,
                              teacher_rate=args.teacher_rate)
     elif args.model_type == 'seg_attn':
