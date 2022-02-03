@@ -24,8 +24,8 @@ class SegAttnModel(nn.Module):
         self.sos_idx = self.c2i['ś']
 
         self.backbone_out = backbone_out
-        self.backbone = FeatureExtractor(out_channels=self.backbone_out,
-                                         dropout=fe_dropout)
+        self.fe = FeatureExtractor(out_channels=self.backbone_out,
+                                   dropout=fe_dropout)
         decoder_args = {'c2i': c2i,
                         'i2c': i2c,
                         'x_size': self.backbone_out,
@@ -43,7 +43,7 @@ class SegAttnModel(nn.Module):
         self.loss_fn = nn.NLLLoss(reduction='none', ignore_index=self.sos_idx)
 
     def forward(self, x, target_seq=None):
-        fm = self.backbone(x)
+        fm = self.fe(x)
         log_probs, preds, attentions = self.decoder(fm, target_seq)
 
         return log_probs, preds, attentions
