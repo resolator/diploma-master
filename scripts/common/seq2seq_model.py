@@ -13,10 +13,8 @@ class Seq2seqModel(nn.Module):
                  i2c,
                  text_max_len,
                  enc_hs=128,
-                 dec_hs=128,
                  emb_size=128,
                  enc_n_layers=1,
-                 dec_n_layers=1,
                  dropout_p=0.1,
                  pe=False,
                  teacher_rate=0.9):
@@ -33,11 +31,10 @@ class Seq2seqModel(nn.Module):
         self.pe = PositionalEncoder(enc_hs * 2) if pe else None
         self.decoder = Decoder(text_max_len=text_max_len,
                                sos_idx=sos_idx,
-                               hs=dec_hs,
+                               enc_hs=enc_hs,
                                emb_size=emb_size,
                                alphabet_size=alpb_size,
                                dropout_p=dropout_p,
-                               n_layers=dec_n_layers,
                                teacher_rate=teacher_rate)
         self.loss_f = nn.NLLLoss(reduction='none', ignore_index=sos_idx)
 
@@ -51,9 +48,7 @@ class Seq2seqModel(nn.Module):
         for i, t_len in enumerate(targets_lens):
             mask[i, :t_len] = 1
 
-        loss = torch.mean(loss[mask])
-
-        return loss
+        return torch.mean(loss[mask])
 
     def forward(self, x, target_seq=None):
         y = self.fe(x)
@@ -110,12 +105,8 @@ class FeatureExtractor(nn.Module):
 class Encoder(nn.Module):
     def __init__(self, input_sz=256, hs=256, n_layers=2):
         super().__init__()
-        self.hs = hs
-        self.n_layers = n_layers
-        self.num_directions = 2  # bidirectional
-
         self.lstm = nn.LSTM(input_sz,
-                            self.hs,
+                            hs,
                             num_layers=n_layers,
                             bidirectional=True)
 
@@ -124,7 +115,6 @@ class Encoder(nn.Module):
         x = x.permute(2, 0, 1)  # W, BS, C
         y, _ = self.lstm(x)  # W, BS, 2HS
 
-        # return y.permute(1, 0, 2)  # BS, W, 2HS
         return y.permute(1, 2, 0)  # BS, 2HS, W
 
 
@@ -132,79 +122,63 @@ class Decoder(nn.Module):
     def __init__(self,
                  text_max_len,
                  sos_idx=0,
-                 hs=256,
                  emb_size=256,
+                 enc_hs=256,
                  alphabet_size=81,
                  dropout_p=0.1,
-                 n_layers=1,
-                 teacher_rate=0.9,
-                 pad_size=550):
+                 teacher_rate=0.9):
         super().__init__()
         self.sos_idx = sos_idx
-        self.n_layers = n_layers
-        self.hs = hs
+        self.hs = emb_size + enc_hs
         self.alphabet_size = alphabet_size
         self.dropout_p = dropout_p
         self.emb_size = emb_size
         self.max_len = text_max_len
         self.teacher_rate = teacher_rate
-        self.pad_size = pad_size
 
         self.emb = nn.Embedding(alphabet_size, self.emb_size)
         self.dropout = nn.Dropout(self.dropout_p)
-        self.lstm = nn.LSTM(self.emb_size + self.pad_size,
-                            self.hs,
-                            num_layers=self.n_layers,
-                            batch_first=True)
-        self.attention = BahdanauAttention(hs, key_size=self.pad_size)
-        self.linear_1 = nn.Linear(self.emb_size + self.pad_size + hs, hs)
+        self.lstm = nn.LSTMCell(input_size=self.hs + enc_hs,
+                                hidden_size=self.hs)
+        self.attention = BahdanauAttention(self.hs)
+        self.linear_1 = nn.Linear(self.emb_size + self.hs + self.hs, self.hs)
         self.linear_2 = nn.Linear(self.hs, self.alphabet_size)
 
     def forward_step(self, x, enc_out, proj_key, hc):
-        query = hc[0][-1].unsqueeze(1)  # BS, 1, HS
+        query = hc[0]  # BS, HS
 
         context, attn_probs = self.attention(query, proj_key, enc_out)
+        rnn_x = torch.cat([x, context], dim=1)
+        h, c = self.lstm(rnn_x, hc)
 
-        rnn_x = torch.cat([x, context], dim=2)
-        y, hc = self.lstm(rnn_x, hc)
-
-        pre_output = torch.cat([x, y, context], dim=2)
+        pre_output = torch.cat([x, h, context], dim=1)
         pre_output = self.dropout(pre_output)
         logits = self.linear_1(pre_output)
 
-        return y, hc, logits, attn_probs
+        return logits, (h, c), attn_probs
 
     def forward(self, enc_out, target_seq=None):
-        if enc_out.size(2) < self.pad_size:
-            diff = self.pad_size - enc_out.size(2)
-            enc_out = F.pad(enc_out, [0, diff], mode='constant', value=0)
         proj_key = self.attention.key_layer(enc_out)
 
         bs = enc_out.shape[0]
         h, c = self.init_hidden(bs, enc_out.device)
         x = torch.ones(
-            (bs, 1),
+            bs,
             dtype=torch.int64,
             device=enc_out.device
         ) * self.sos_idx
 
-        decoder_states = []
-        pre_output_vectors = []
-        logs_probs = []
-        preds = []
-        attentions = []
+        logs_probs, preds, attentions = [], [], []
         for i in range(self.max_len):
             prev_embed = self.emb(x)
 
-            output, (h, c), pre_output, attn_probs = self.forward_step(
+            output, (h, c), attn_probs = self.forward_step(
                 prev_embed, enc_out, proj_key, (h, c)
             )
-            decoder_states.append(output)
-            pre_output_vectors.append(pre_output)
             attentions.append(attn_probs)
 
             # BS, HS
-            log_probs = F.log_softmax(self.linear_2(pre_output[:, -1]), dim=-1)
+            log_probs = F.log_softmax(self.linear_2(output), dim=-1)
             logs_probs.append(log_probs)
             _, next_word = torch.max(log_probs, dim=1)
             preds.append(next_word)
@@ -212,16 +186,16 @@ class Decoder(nn.Module):
             # select next input
             use_gt = np.random.rand() <= self.teacher_rate
             if (target_seq is not None) and self.training and use_gt:
-                x = target_seq[:, i].unsqueeze(1)
+                x = target_seq[:, i]
             else:
-                x = next_word.unsqueeze(1)
+                x = next_word
 
         return (torch.stack(logs_probs).permute(1, 0, 2),
                 torch.stack(preds).permute(1, 0),
                 torch.stack(attentions).squeeze(2).permute(1, 0, 2))
 
     def init_hidden(self, bs, device):
-        return torch.zeros(2, self.n_layers, bs, self.hs,
+        return torch.zeros(2, bs, self.hs,
                            dtype=torch.float, device=device)
 
 
@@ -229,23 +203,21 @@ class BahdanauAttention(nn.Module):
     def __init__(self, hs=256, key_size=None, query_size=None):
         super().__init__()
 
-        # bidirectional lstm so key_size is 2*hidden_size
-        key_size = 2 * hs if key_size is None else key_size
         query_size = hs if query_size is None else query_size
 
-        self.key_layer = nn.Linear(key_size, hs, bias=False)
-        self.decoder_linear = nn.Linear(query_size, hs, bias=False)
-        self.energy_layer = nn.Linear(hs, 1, bias=False)
+        self.key_layer = nn.Conv1d(hs, hs, 1)
+        self.decoder_linear = nn.Linear(query_size, hs)
+        self.energy_layer = nn.Conv1d(hs, 1, 1)
 
     def forward(self, dec_hs, enc_hss, value):
         # encoder states are already pre-computated
-        dec_hs = self.decoder_linear(dec_hs)
-        scores = self.energy_layer(torch.tanh(dec_hs + enc_hss))
-        scores = scores.squeeze(2).unsqueeze(1)
+        dec_hs = self.decoder_linear(dec_hs).unsqueeze(2)
+        pre_scores = torch.tanh(enc_hss + dec_hs)
+        scores = self.energy_layer(pre_scores)
         alphas = F.softmax(scores, dim=-1)
-        context = torch.bmm(alphas, value)
+        context = torch.bmm(value, alphas.permute(0, 2, 1))
 
-        return context, alphas  # BS, 1, 2HS; BS, 1, M
+        return context.squeeze(2), alphas.squeeze(1)  # BS, 2HS; BS, W
 
 
 class PositionalEncoder(nn.Module):

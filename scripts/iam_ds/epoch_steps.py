@@ -64,9 +64,8 @@ def epoch_step_seg_attn(model, loaders, device, optim, writer, epoch):
 
             # dump attention
             if i % 50 == 0:
-                att = atts[0].squeeze(1)
-                att = att.repeat_interleave(2, -2)
-                att_img = att.detach().unsqueeze(0).cpu().numpy()
+                att = atts[0].detach().sum(dim=1).repeat_interleave(2, -2)
+                att_img = att.unsqueeze(0).cpu().numpy()
                 att_img -= att_img.min()
                 att_img = (att_img / att_img.max() * 255).astype(np.uint8)
                 cur_img = (img[0].cpu().numpy() * 255).astype(np.uint8)

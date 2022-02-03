@@ -36,17 +36,15 @@ def create_model(c2i, i2c, args):
                              i2c=i2c,
                              text_max_len=args.text_max_len,
                              enc_hs=args.enc_hs,
-                             dec_hs=args.dec_hs,
                              emb_size=args.emb_size,
                              enc_n_layers=args.enc_layers,
-                             dec_n_layers=args.dec_layers,
                              pe=args.pos_encoding,
                              teacher_rate=args.teacher_rate)
     elif args.model_type == 'seg_attn':
         model = SegAttnModel(c2i=c2i,
                              i2c=i2c,
                              text_max_len=args.text_max_len,
-                             backbone_out=256,
+                             backbone_out=args.backbone_out,
                              dec_dropout=args.dec_dropout,
                              teacher_rate=args.teacher_rate,
                              decoder_type=args.decoder_type,
