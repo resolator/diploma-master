@@ -34,12 +34,12 @@ def get_args():
                              'In this case bs will be 1.')
 
     args = parser.parse_args()
-    
+
     if args.save_errors_to is not None:
         print('--save-errors-to passed, bs is set to 1.')
         args.bs = 1
         args.save_errors_to.mkdir(exist_ok=True, parents=True)
-    
+
     return args
 
 
@@ -70,20 +70,11 @@ def main():
     dl = DataLoader(ds, args.bs, num_workers=4, collate_fn=ds.collate_fn)
 
     print('Model creation')
-    model_type='ctc'
-    if 'pos_encoding' in ckpt['args']:
-        model_type='seq2seq'
-        model = create_model(c2i,
-                             i2c,
-                             model_type='seq2seq',
-                             text_max_len=ds.max_len,
-                             pe=ckpt['args'].pos_encoding).to(device)
-    else:
-        model = create_model(c2i, i2c, model_type='ctc').to(device)
-    
+    model = create_model(c2i, i2c, ckpt['args']).to(device)
     model.load_state_dict(ckpt['model'])
     model.eval()
-    
+    model_type = ckpt['args'].model_type
+
     print('This model metrics:')
     pprint(ckpt['metrics'])
 
@@ -93,7 +84,7 @@ def main():
     errors = {}
     for idx, (img, text, lens) in enumerate(tqdm(dl, desc='Evaluating')):
         img, text, lens = img.to(device), text.to(device), lens.to(device)
-        
+
         if model_type == 'ctc':
             _, log_probs = model(img)
             pd_text, _ = model.decode(log_probs)
@@ -107,7 +98,7 @@ def main():
         gt_lens = lens.detach().cpu().numpy()
         cer = calc_cer(gt_text, pd_text, gt_lens)
         final_cer += cer / loader_size
-        
+
         # save errors
         if (args.save_errors_to is not None) and cer > 0:
             img_name = str(idx) + '.png'
@@ -116,7 +107,7 @@ def main():
             img_path = args.save_errors_to.joinpath(img_name)
             img = (img.squeeze() * 255).cpu().numpy().astype(np.uint8)
             cv2.imwrite(str(img_path), img)
-    
+
     if args.save_errors_to is not None:
         with open(args.save_errors_to.joinpath('errors.json'), 'w') as f:
             json.dump(errors, fp=f, indent=4)

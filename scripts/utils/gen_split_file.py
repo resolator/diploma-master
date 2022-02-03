@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*
+# -*- coding: utf-8 -*-
 """Generate train/validation/test split file."""
 import argparse
 
