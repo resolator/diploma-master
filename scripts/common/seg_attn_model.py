@@ -4,6 +4,7 @@
 import torch
 from torch import nn
 from torch.nn import functional as F
+from timm import create_model
 
 
 class SegAttnModel(nn.Module):
@@ -70,44 +71,54 @@ class FeatureExtractor(nn.Module):
             out_channels, dropout
         ))
 
-        self.fe = nn.Sequential(
-            nn.Conv2d(1, 32, (5, 5), (1, 1), (2, 2)),
-            nn.BatchNorm2d(32),
-            nn.ReLU(),
-            nn.MaxPool2d((2, 2)),
+        if True:
+            self.fe = create_model('efficientnet_b0',
+                                   in_chans=1,
+                                   num_classes=0,
+                                   pretrained=True,
+                                   global_pool='')
+            self.fe.conv_head = nn.Conv2d(320, out_channels, 1)
+            self.fe.bn2 = nn.BatchNorm2d(out_channels)
+        else:
+            self.fe = nn.Sequential(
+                nn.Conv2d(1, 32, (5, 5), (1, 1), (2, 2)),
+                nn.BatchNorm2d(32),
+                nn.ReLU(),
+                nn.MaxPool2d((2, 2)),
 
-            nn.Conv2d(32, 64, (5, 5), (1, 1), (2, 2)),
-            nn.BatchNorm2d(64),
-            nn.ReLU(),
-            nn.MaxPool2d((2, 2)),
+                nn.Conv2d(32, 64, (5, 5), (1, 1), (2, 2)),
+                nn.BatchNorm2d(64),
+                nn.ReLU(),
+                nn.MaxPool2d((2, 2)),
 
-            nn.Conv2d(64, 128, (3, 3), (1, 1), (1, 1)),
-            nn.BatchNorm2d(128),
-            nn.ReLU(),
-            nn.MaxPool2d((2, 1)),
+                nn.Conv2d(64, 128, (3, 3), (1, 1), (1, 1)),
+                nn.BatchNorm2d(128),
+                nn.ReLU(),
+                nn.MaxPool2d((2, 1)),
 
-            nn.Conv2d(128, 128, (3, 3), (1, 1), (1, 1)),
-            nn.BatchNorm2d(128),
-            nn.ReLU(),
-            nn.MaxPool2d((2, 1)),
+                nn.Conv2d(128, 128, (3, 3), (1, 1), (1, 1)),
+                nn.BatchNorm2d(128),
+                nn.ReLU(),
+                nn.MaxPool2d((2, 1)),
 
-            nn.Conv2d(128, 256, (3, 3), (1, 1), (1, 1)),
-            nn.BatchNorm2d(256),
-            nn.ReLU(),
-            nn.MaxPool2d((2, 1)),
+                nn.Conv2d(128, 256, (3, 3), (1, 1), (1, 1)),
+                nn.BatchNorm2d(256),
+                nn.ReLU(),
+                nn.MaxPool2d((2, 1)),
 
-            nn.Conv2d(256, out_channels, (3, 3), (1, 1), (1, 1)),
-            nn.BatchNorm2d(out_channels),
-            nn.ReLU(),
-            nn.MaxPool2d((2, 1)),
+                nn.Conv2d(256, out_channels, (3, 3), (1, 1), (1, 1)),
+                nn.BatchNorm2d(out_channels),
+                nn.ReLU(),
+                nn.MaxPool2d((2, 1)),
 
-            nn.Dropout(dropout)
-        )
+                nn.Dropout(dropout)
+            )
 
     def forward(self, x):
         # x.shape == BS, 1, 64, W
         # return self.fe(x).squeeze(2)  # BS, 256, W // 4
-        return self.fe(x)  # BS, 256, 1, W // 4
+        # return self.fe(x)  # BS, 256, 1, W // 4
+        return self.fe(x)
 
 
 class AttnRNNDecoder(nn.Module):
@@ -136,14 +147,14 @@ class AttnRNNDecoder(nn.Module):
         self.sos_idx = sos_idx
 
         self.n_layers = 1
-        attn_size = 256
-        self.hs = emb_size + attn_size
+        self.hs = emb_size + x_size
 
         self.emb = nn.Embedding(alpb_size, emb_size)
+        attn_size = 256
         self.attention = Attention(h_dec_size=self.hs,
                                    channels=x_size,
                                    out_size=attn_size)
-        self.rnn = nn.LSTMCell(input_size=emb_size + x_size,
+        self.rnn = nn.LSTMCell(input_size=emb_size + attn_size,
                                hidden_size=self.hs)
         self.dropout = nn.Dropout(dropout)
         self.fc = nn.Linear(self.hs, alpb_size)
