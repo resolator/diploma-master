@@ -302,6 +302,7 @@ class Attention(nn.Module):
             nn.ReLU(),
             nn.Conv2d(out_size, 1, (1, 1))
         )
+        self.context_proc = nn.Linear(channels, out_size)
 
     def forward(self, h_dec, fm):
         """Forward pass.
@@ -333,6 +334,7 @@ class Attention(nn.Module):
                              dim=1).reshape(attn_map.shape)
 
         attn = fm * heat_map.unsqueeze(1)
-        context = attn.sum(dim=[2, 3])
+        context = attn.flatten(start_dim=2).max(dim=-1).values
+        context = self.context_proc(context)
 
         return context, heat_map
