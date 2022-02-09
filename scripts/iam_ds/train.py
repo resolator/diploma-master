@@ -31,6 +31,10 @@ def get_args():
                         help='Model type to train.')
     parser.add_argument('--ckpt-path', type=Path,
                         help='Path to saved model to load for training.')
+    parser.add_argument('--load-model-only', action='store_true',
+                        help='Load only model from checkpoint.')
+    parser.add_argument('--load-fe-only', action='store_true',
+                        help='Load only Feature Extractor from checkpoint.')
     parser.add_argument('--images-dir', type=Path, required=True,
                         help='Path to root dir with images (ex. iam/lines/).')
     parser.add_argument('--mkp-dir', type=Path, required=True,
@@ -128,16 +132,34 @@ def save_model(model, optim, args, ep, metrics, best_metrics, models_dir):
                 print(f'Saved {stage} {m}')
 
 
-def load_model(ckpt_path, model, optim, device):
+def load_ckpt(ckpt_path, model, optim, device, model_only=False, fe_only=False):
     ckpt = torch.load(ckpt_path, map_location=device)
-    model.load_state_dict(ckpt['model'])
-    optim.load_state_dict(ckpt['optim'])
-    best_metrics = ckpt['best_metrics']
+    ep = 1
+
+    if model_only:
+        print('\nLoading model only')
+        model.load_state_dict(ckpt['model'])
+        best_metrics = get_metrics_dict(model_type=ckpt['args'].model_type,
+                                        init_value=np.inf)
+    elif fe_only:
+        print('\nLoading Features Extractor only')
+        sd = {k.split('.', maxsplit=1)[1]: v
+                for k, v in ckpt['model'].items()
+                if k.split('.')[0] == 'fe'}
+        model.fe.load_state_dict(sd)
+        best_metrics = get_metrics_dict(model_type=ckpt['args'].model_type,
+                                        init_value=np.inf)
+    else:
+        print('\nLoading model, optim and best metrics')
+        model.load_state_dict(ckpt['model'])
+        optim.load_state_dict(ckpt['optim'])
+        best_metrics = ckpt['best_metrics']
+        ep = ckpt['epoch'] + 1
 
     print('\nCheckpoint metrics:')
     pprint(ckpt['metrics'])
 
-    return model, optim, best_metrics
+    return model, optim, best_metrics, ep
 
 
 def main():
@@ -197,12 +219,17 @@ def main():
                                     init_value=np.inf)
 
     # continue training if needed
+    ep = 1
     if args.ckpt_path is not None:
-        model, optim, best_metrics = load_model(
-            args.ckpt_path, model, optim, device
+        model, optim, best_metrics, ep = load_ckpt(
+            args.ckpt_path,
+            model,
+            optim,
+            device,
+            args.load_model_only,
+            args.load_fe_only
         )
 
-    ep = 1
     while ep != args.epochs + 1:
         print(f'\nEpoch #{ep}')
         metrics = epoch_step(model, loaders, device, optim, writer, ep)

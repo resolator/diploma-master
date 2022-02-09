@@ -5,6 +5,7 @@ import torch
 import numpy as np
 from torch import nn
 from torch.nn import functional as F
+from .conv_net import ConvNet6
 
 
 class Seq2seqModel(nn.Module):
@@ -17,14 +18,15 @@ class Seq2seqModel(nn.Module):
                  enc_n_layers=1,
                  dropout_p=0.1,
                  pe=False,
-                 teacher_rate=0.9):
+                 teacher_rate=0.9,
+                 fe_dropout=0.15):
         super().__init__()
         self.i2c = i2c
         self.c2i = c2i
         sos_idx = self.c2i['ś']
         alpb_size = len(self.i2c)
 
-        self.fe = FeatureExtractor()
+        self.fe = ConvNet6(dropout=fe_dropout)
         self.encoder = Encoder(input_sz=256,
                                hs=enc_hs,
                                n_layers=enc_n_layers)
@@ -51,55 +53,13 @@ class Seq2seqModel(nn.Module):
         return torch.mean(loss[mask])
 
     def forward(self, x, target_seq=None):
-        y = self.fe(x)
+        y = self.fe(x).squeeze(2)
         y = self.encoder(y)
 
         if self.pe is not None:
             y = self.pe(y)
 
         return self.decoder(y, target_seq)
-
-
-# dont forget about FPN
-class FeatureExtractor(nn.Module):
-    def __init__(self):
-        super().__init__()
-        self.fe = nn.Sequential(
-            nn.Conv2d(1, 32, (5, 5), (1, 1), (2, 2)),
-            nn.BatchNorm2d(32),
-            nn.ReLU(),
-            nn.MaxPool2d((2, 2)),
-
-            nn.Conv2d(32, 64, (5, 5), (1, 1), (2, 2)),
-            nn.BatchNorm2d(64),
-            nn.ReLU(),
-            nn.MaxPool2d((2, 2)),
-
-            nn.Conv2d(64, 128, (3, 3), (1, 1), (1, 1)),
-            nn.BatchNorm2d(128),
-            nn.ReLU(),
-            nn.MaxPool2d((2, 1)),
-
-            nn.Conv2d(128, 128, (3, 3), (1, 1), (1, 1)),
-            nn.BatchNorm2d(128),
-            nn.ReLU(),
-            nn.MaxPool2d((2, 1)),
-
-            nn.Conv2d(128, 256, (3, 3), (1, 1), (1, 1)),
-            nn.BatchNorm2d(256),
-            nn.ReLU(),
-            nn.MaxPool2d((2, 1)),
-
-            nn.Conv2d(256, 256, (3, 3), (1, 1), (1, 1)),
-            nn.BatchNorm2d(256),
-            nn.ReLU(),
-            nn.MaxPool2d((2, 1)),
-
-            nn.Dropout(0.15)
-        )
-
-    def forward(self, x):
-        return self.fe(x).squeeze(2)  # BS, 256, W / 4
 
 
 class Encoder(nn.Module):
@@ -200,13 +160,11 @@ class Decoder(nn.Module):
 
 
 class BahdanauAttention(nn.Module):
-    def __init__(self, hs=256, key_size=None, query_size=None):
+    def __init__(self, hs=256):
         super().__init__()
 
-        query_size = hs if query_size is None else query_size
-
         self.key_layer = nn.Conv1d(hs, hs, 1)
-        self.decoder_linear = nn.Linear(query_size, hs)
+        self.decoder_linear = nn.Linear(hs, hs)
         self.energy_layer = nn.Conv1d(hs, 1, 1)
 
     def forward(self, dec_hs, enc_hss, value):

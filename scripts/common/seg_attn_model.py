@@ -4,7 +4,7 @@
 import torch
 from torch import nn
 from torch.nn import functional as F
-from timm import create_model
+from .conv_net import ConvNet6
 
 
 class SegAttnModel(nn.Module):
@@ -25,8 +25,8 @@ class SegAttnModel(nn.Module):
         self.sos_idx = self.c2i['ś']
 
         self.backbone_out = backbone_out
-        self.fe = FeatureExtractor(out_channels=self.backbone_out,
-                                   dropout=fe_dropout)
+        self.fe = ConvNet6(out_channels=self.backbone_out,
+                           dropout=fe_dropout)
         decoder_args = {'c2i': c2i,
                         'i2c': i2c,
                         'x_size': self.backbone_out,
@@ -61,64 +61,6 @@ class SegAttnModel(nn.Module):
         loss = torch.mean(loss[mask])
 
         return loss
-
-
-class FeatureExtractor(nn.Module):
-    def __init__(self, out_channels=256, dropout=0.0):
-        super().__init__()
-        print('========== FeatureExtractor args ==========')
-        print('out_channels: {}; dropout: {};'.format(
-            out_channels, dropout
-        ))
-
-        if True:
-            self.fe = create_model('efficientnet_b0',
-                                   in_chans=1,
-                                   num_classes=0,
-                                   pretrained=True,
-                                   global_pool='')
-            self.fe.conv_head = nn.Conv2d(320, out_channels, 1)
-            self.fe.bn2 = nn.BatchNorm2d(out_channels)
-        else:
-            self.fe = nn.Sequential(
-                nn.Conv2d(1, 32, (5, 5), (1, 1), (2, 2)),
-                nn.BatchNorm2d(32),
-                nn.ReLU(),
-                nn.MaxPool2d((2, 2)),
-
-                nn.Conv2d(32, 64, (5, 5), (1, 1), (2, 2)),
-                nn.BatchNorm2d(64),
-                nn.ReLU(),
-                nn.MaxPool2d((2, 2)),
-
-                nn.Conv2d(64, 128, (3, 3), (1, 1), (1, 1)),
-                nn.BatchNorm2d(128),
-                nn.ReLU(),
-                nn.MaxPool2d((2, 1)),
-
-                nn.Conv2d(128, 128, (3, 3), (1, 1), (1, 1)),
-                nn.BatchNorm2d(128),
-                nn.ReLU(),
-                nn.MaxPool2d((2, 1)),
-
-                nn.Conv2d(128, 256, (3, 3), (1, 1), (1, 1)),
-                nn.BatchNorm2d(256),
-                nn.ReLU(),
-                nn.MaxPool2d((2, 1)),
-
-                nn.Conv2d(256, out_channels, (3, 3), (1, 1), (1, 1)),
-                nn.BatchNorm2d(out_channels),
-                nn.ReLU(),
-                nn.MaxPool2d((2, 1)),
-
-                nn.Dropout(dropout)
-            )
-
-    def forward(self, x):
-        # x.shape == BS, 1, 64, W
-        # return self.fe(x).squeeze(2)  # BS, 256, W // 4
-        # return self.fe(x)  # BS, 256, 1, W // 4
-        return self.fe(x)
 
 
 class AttnRNNDecoder(nn.Module):

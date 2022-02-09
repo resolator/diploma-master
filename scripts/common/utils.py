@@ -39,7 +39,8 @@ def create_model(c2i, i2c, args):
                              emb_size=args.emb_size,
                              enc_n_layers=args.enc_layers,
                              pe=args.pos_encoding,
-                             teacher_rate=args.teacher_rate)
+                             teacher_rate=args.teacher_rate,
+                             fe_dropout=getattr(args, 'fe_dropout', 0.15))
     elif args.model_type == 'seg_attn':
         model = SegAttnModel(c2i=c2i,
                              i2c=i2c,
