@@ -36,7 +36,7 @@ class ConvNet6(nn.Module):
             nn.ReLU(),
             nn.MaxPool2d((2, 1)),
 
-            nn.Conv2d(256, out_channels, (3, 3), (1, 1), (1, 1)),
+            nn.Conv2d(256, out_channels, (1, 1)),
             nn.BatchNorm2d(out_channels),
             nn.ReLU(),
             nn.MaxPool2d((2, 1)),
