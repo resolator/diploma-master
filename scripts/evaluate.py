@@ -85,7 +85,7 @@ def main():
     for idx, (img, text, lens) in enumerate(tqdm(dl, desc='Evaluating')):
         img, text, lens = img.to(device), text.to(device), lens.to(device)
 
-        if model_type == 'ctc':
+        if model_type == 'baseline':
             _, log_probs = model(img)
             pd_text, _ = model.decode(log_probs)
             pd_text = ds.tensor2text(pd_text)
