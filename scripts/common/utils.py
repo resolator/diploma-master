@@ -36,6 +36,8 @@ def create_model(c2i, i2c, args):
                              i2c=i2c,
                              text_max_len=args.text_max_len,
                              enc_hs=args.enc_hs,
+                             dec_hs=args.dec_hs,
+                             attn_sz=args.attn_size,
                              emb_size=args.emb_size,
                              enc_n_layers=args.enc_layers,
                              pe=args.pos_encoding,

@@ -84,6 +84,10 @@ def get_args():
                          help='Add positional encoding before decoder.')
     seq2seq.add_argument('--enc-hs', type=int, default=128,
                          help='(bidirectional) Encoder hidden size.')
+    seq2seq.add_argument('--dec-hs', type=int, default=256,
+                         help='Decoder hidden size.')
+    seq2seq.add_argument('--attn-size', type=int, default=256,
+                         help='Attention size.')
     seq2seq.add_argument('--emb-size', type=int, default=128,
                          help='Embedding size.')
     seq2seq.add_argument('--teacher-rate', type=float, default=1.0,
