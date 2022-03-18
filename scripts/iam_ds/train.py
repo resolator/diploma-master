@@ -35,6 +35,8 @@ def get_args():
                         help='Load only model from checkpoint.')
     parser.add_argument('--load-fe-only', action='store_true',
                         help='Load only Feature Extractor from checkpoint.')
+    parser.add_argument('--freeze-backbone', action='store_true',
+                        help='Freeze pretrained backbone.')
     parser.add_argument('--images-dir', type=Path, required=True,
                         help='Path to root dir with images (ex. iam/lines/).')
     parser.add_argument('--mkp-dir', type=Path, required=True,
@@ -233,6 +235,10 @@ def main():
             args.load_model_only,
             args.load_fe_only
         )
+
+        # freeze pretrained backbone
+        if args.freeze_backbone:
+            model.fe.freeze()
 
     while ep != args.epochs + 1:
         print(f'\nEpoch #{ep}')

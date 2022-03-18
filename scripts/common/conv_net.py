@@ -59,3 +59,8 @@ class ConvNet6(nn.Module):
         """
 
         return self.fe(x)
+
+    def freeze(self):
+        """Freeze network."""
+        for param in self.parameters():
+            param.requires_grad = False
