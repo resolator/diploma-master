@@ -89,7 +89,7 @@ class AttnRNNDecoder(nn.Module):
         self.sos_idx = sos_idx
 
         self.n_layers = 1
-        self.hs = emb_size + x_size
+        self.hs = h_size
 
         self.emb = nn.Embedding(alpb_size, emb_size)
         attn_size = 256
@@ -99,7 +99,12 @@ class AttnRNNDecoder(nn.Module):
         self.rnn = nn.LSTMCell(input_size=emb_size + attn_size,
                                hidden_size=self.hs)
         self.dropout = nn.Dropout(dropout)
-        self.fc = nn.Linear(self.hs, alpb_size)
+        self.fc = nn.Sequential(
+            nn.Linear(self.hs, self.hs // 2),
+            nn.BatchNorm1d(self.hs // 2),
+            nn.ReLU(),
+            nn.Linear(self.hs // 2, alpb_size)
+        )
 
     def forward_step(self, y_emb, h, fm):
         h_attn = h[0]  # (BS, emb_size)
@@ -250,12 +255,24 @@ class Attention(nn.Module):
 
         self.h_dec_proc = nn.Linear(h_dec_size, channels)
         self.summed_x_proc = nn.Sequential(
-            nn.Conv2d(channels, out_size, (1, 1)),
-            nn.BatchNorm2d(out_size),
+            nn.Conv2d(2 * channels, channels, (1, 1)),
+            nn.BatchNorm2d(channels),
             nn.ReLU(),
-            nn.Conv2d(out_size, 1, (1, 1))
+            nn.Conv2d(channels, channels // 2, (1, 1)),
+            nn.BatchNorm2d(channels // 2),
+            nn.ReLU(),
+            nn.Conv2d(channels // 2, 1, (1, 1))
         )
-        self.context_proc = nn.Linear(channels, out_size)
+        self.attended_proc = nn.Sequential(
+            nn.ReLU(),
+            nn.BatchNorm2d(channels),
+            nn.Conv2d(channels, channels, (1, 1))
+        )
+        self.summed_proc = nn.Sequential(
+            nn.BatchNorm1d(channels),
+            nn.ReLU(),
+            nn.Linear(channels, out_size)
+        )
 
     def forward(self, h_dec, fm):
         """Forward pass.
@@ -280,14 +297,17 @@ class Attention(nn.Module):
         assert len(h_dec.shape) == 2, "invalid number of shape for h_dec"
 
         weighted_h_dec = self.h_dec_proc(h_dec).unsqueeze(-1).unsqueeze(-1)
-        summed_x = fm + weighted_h_dec
-        attn_map = self.summed_x_proc(summed_x).squeeze(1)  # BS, H, W
+        repeated_h_dec = weighted_h_dec.repeat(1, 1, fm.size(2), fm.size(3))
+
+        concated = torch.cat([fm, repeated_h_dec], dim=1)  # BS, 2C, H, W
+        attn_map = self.summed_x_proc(concated).squeeze(1)  # BS, H, W
 
         heat_map = F.softmax(attn_map.flatten(1),
                              dim=1).reshape(attn_map.shape)
 
         attn = fm * heat_map.unsqueeze(1)
-        context = attn.flatten(start_dim=2).max(dim=-1).values
-        context = self.context_proc(context)
+        attn_proc = self.attended_proc(attn)
+        summed = attn_proc.sum(dim=[2, 3])
+        context = self.summed_proc(summed)
 
         return context, heat_map
