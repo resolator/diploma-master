@@ -67,3 +67,11 @@ def calc_cer(gt, pd, gt_lens=None):
         pd = [x.replace('_', '')[:y] for x, y in zip(pd, gt_lens)]
 
     return fastwer.score(pd, gt, char_level=True)
+
+
+def print_model_params(model):
+    print('Trainable parameters:')
+    print(sum(p.numel() for p in model.parameters() if p.requires_grad))
+
+    print('All parameters:')
+    sum(p.numel() for p in model.parameters())

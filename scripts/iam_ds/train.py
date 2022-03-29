@@ -16,7 +16,7 @@ from iam_dataset import IAMDataset
 from epoch_steps import get_epoch_step_fn, get_metrics_dict
 
 sys.path.append(str(Path(sys.path[0]).parent))
-from common.utils import build_alphabet, create_model
+from common.utils import build_alphabet, create_model, print_model_params
 
 
 def get_args():
@@ -214,7 +214,8 @@ def main():
 
     dl_args = {'batch_size': args.bs,
                'num_workers': args.workers,
-               'shuffle': True}
+               'shuffle': True,
+               'drop_last': True}
     loaders = {'train': DataLoader(ds_train,
                                    collate_fn=ds_train.collate_fn, **dl_args),
                'valid': DataLoader(ds_valid,
@@ -239,6 +240,9 @@ def main():
         # freeze pretrained backbone
         if args.freeze_backbone:
             model.fe.freeze()
+
+    # print the number of model's parameters
+    print_model_params(model)
 
     while ep != args.epochs + 1:
         print(f'\nEpoch #{ep}')
