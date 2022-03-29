@@ -74,4 +74,4 @@ def print_model_params(model):
     print(sum(p.numel() for p in model.parameters() if p.requires_grad))
 
     print('All parameters:')
-    sum(p.numel() for p in model.parameters())
+    print(sum(p.numel() for p in model.parameters()))
