@@ -256,20 +256,16 @@ class Attention(nn.Module):
         self.h_dec_proc = nn.Linear(h_dec_size, channels)
         self.summed_x_proc = nn.Sequential(
             nn.Conv2d(2 * channels, channels, (1, 1)),
-            nn.BatchNorm2d(channels),
             nn.ReLU(),
             nn.Conv2d(channels, channels // 2, (1, 1)),
-            nn.BatchNorm2d(channels // 2),
             nn.ReLU(),
             nn.Conv2d(channels // 2, 1, (1, 1))
         )
         self.attended_proc = nn.Sequential(
             nn.ReLU(),
-            nn.BatchNorm2d(channels),
             nn.Conv2d(channels, channels, (1, 1))
         )
         self.summed_proc = nn.Sequential(
-            nn.BatchNorm1d(channels),
             nn.ReLU(),
             nn.Linear(channels, out_size)
         )
