@@ -70,8 +70,11 @@ def calc_cer(gt, pd, gt_lens=None):
 
 
 def print_model_params(model):
-    print('Trainable parameters:')
-    print(sum(p.numel() for p in model.parameters() if p.requires_grad))
+    print('=' * 32)
+    print('All parameters:       ', end='')
+    print('{:,}'.format(sum(p.numel() for p in model.parameters())))
 
-    print('All parameters:')
-    print(sum(p.numel() for p in model.parameters()))
+    print('Trainable parameters: ', end='')
+    print('{:,}'.format(sum(p.numel()
+                            for p in model.parameters() if p.requires_grad)))
+    print('=' * 32)
