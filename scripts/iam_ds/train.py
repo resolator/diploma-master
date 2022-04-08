@@ -112,8 +112,12 @@ def get_args():
                           help='Decoder type.')
     seg_attn.add_argument('--emb-size', type=int, default=256,
                           help='Embedding size.')
+    seg_attn.add_argument('--backbone', default='custom',
+                          choices=['custom', 'resnet18',
+                                   'resnet34', 'efficientnet_b0'],
+                          help='Backbone type.')
     seg_attn.add_argument('--backbone-out', type=int, default=256,
-                          help='Backbone out channels number.')
+                          help='Backbone out channels number (for custom only).')
 
     return parser.parse_args()
 

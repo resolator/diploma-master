@@ -47,6 +47,7 @@ def create_model(c2i, i2c, args):
         model = SegAttnModel(c2i=c2i,
                              i2c=i2c,
                              text_max_len=args.text_max_len,
+                             backbone=args.backbone,
                              backbone_out=args.backbone_out,
                              dec_dropout=args.dec_dropout,
                              teacher_rate=args.teacher_rate,

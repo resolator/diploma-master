@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*
 """Network with custom attention."""
+import timm
 import torch
 from torch import nn
 from torch.nn import functional as F
@@ -12,6 +13,7 @@ class SegAttnModel(nn.Module):
                  c2i,
                  i2c,
                  text_max_len=98,
+                 backbone='custom',
                  backbone_out=256,
                  dec_dropout=0.15,
                  teacher_rate=1.0,
@@ -24,9 +26,20 @@ class SegAttnModel(nn.Module):
         self.i2c = i2c
         self.sos_idx = self.c2i['ś']
 
-        self.backbone_out = backbone_out
-        self.fe = ConvNet6(out_channels=self.backbone_out,
-                           dropout=fe_dropout)
+        assert backbone in ['custom', 'resnet18', 'resnet34', 'efficientnet_b0']
+        if backbone == 'custom':
+            self.backbone_out = backbone_out
+            self.fe = ConvNet6(out_channels=self.backbone_out,
+                               dropout=fe_dropout)
+        else:
+            self.fe = timm.create_model(backbone,
+                                        pretrained=True,
+                                        in_chans=1,
+                                        num_classes=0,
+                                        global_pool='')
+            self.backbone_out = self.fe.num_features
+
+
         decoder_args = {'c2i': c2i,
                         'i2c': i2c,
                         'x_size': self.backbone_out,
