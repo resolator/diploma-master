@@ -6,6 +6,8 @@ import argparse
 from pathlib import Path
 from pprint import pprint
 
+from common.utils import calc_params
+
 
 def get_args():
     """Arguments parser."""
@@ -23,6 +25,7 @@ def main():
     ckpt = torch.load(args.ckpt_path, map_location='cpu')
 
     print('=' * 79)
+    print('Params num: {:,}'.format(calc_params(ckpt['model'].values())))
     print('Epoch number:', ckpt['epoch'])
     print('Metrics for this model:')
     pprint(ckpt['metrics'])

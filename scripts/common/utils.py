@@ -69,12 +69,18 @@ def calc_cer(gt, pd, gt_lens=None):
     return fastwer.score(pd, gt, char_level=True)
 
 
+def calc_params(params, check_requires_grad=False):
+    if check_requires_grad:
+        return sum(p.numel() for p in params if p.requires_grad)
+    else:
+        return sum(p.numel() for p in params)
+
+
 def print_model_params(model):
     print('=' * 32)
     print('All parameters:       ', end='')
-    print('{:,}'.format(sum(p.numel() for p in model.parameters())))
+    print('{:,}'.format(calc_params(model.parameters())))
 
     print('Trainable parameters: ', end='')
-    print('{:,}'.format(sum(p.numel()
-                            for p in model.parameters() if p.requires_grad)))
+    print('{:,}'.format(calc_params(model.parameters(), True)))
     print('=' * 32)
