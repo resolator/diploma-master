@@ -197,8 +197,7 @@ def main():
 
     epoch_step = get_epoch_step_fn(args.model_type)
     model = create_model(c2i, i2c, args=args).to(device)
-    optim = torch.optim.Adam(params=model.parameters(), lr=args.lr,
-                             weight_decay=1e-5)
+    optim = torch.optim.Adam(params=model.parameters(), lr=args.lr)
 
     # datasets
     ds_args = {'images_dir': args.images_dir,
