@@ -39,7 +39,6 @@ class SegAttnModel(nn.Module):
                                         global_pool='')
             self.backbone_out = self.fe.num_features
 
-
         decoder_args = {'c2i': c2i,
                         'i2c': i2c,
                         'x_size': self.backbone_out,
@@ -109,6 +108,10 @@ class AttnRNNDecoder(nn.Module):
         self.attention = Attention(h_dec_size=self.hs,
                                    channels=x_size,
                                    out_size=attn_size)
+        self.cat_linear = nn.Sequential(
+            nn.ReLU(),
+            nn.Linear(emb_size + attn_size, emb_size + attn_size)
+        )
         self.rnn = nn.LSTMCell(input_size=emb_size + attn_size,
                                hidden_size=self.hs)
         self.dropout = nn.Dropout(dropout)
@@ -121,8 +124,9 @@ class AttnRNNDecoder(nn.Module):
 
     def forward_step(self, y_emb, h, fm):
         h_attn = h[0]  # (BS, emb_size)
-        z, heat_map = self.attention(h_attn, fm)  # (BS, emb_size)
-        x = torch.cat([y_emb, z], dim=1)  # BS, 2 * emb_size
+        context, heat_map = self.attention(h_attn, fm)  # (BS, emb_size)
+        x = torch.cat([y_emb, context], dim=1)  # BS, emb_size + attn_size
+        x = self.cat_linear(x)
 
         return self.rnn(x, h), heat_map  # 2, BS, HS
 
