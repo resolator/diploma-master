@@ -58,7 +58,7 @@ def main():
     c2i = {c: idx for idx, c in enumerate(i2c)}
 
     print('Creating dataset')
-    text_max_len = 98
+    text_max_len = ckpt['args'].text_max_len
     ds = IAMDataset(images_dir=args.images_dir,
                     markup_dir=args.mkp_dir,
                     split_filepath=args.split,
@@ -67,12 +67,14 @@ def main():
                     width=getattr(ckpt['args'], 'img_max_width'),
                     max_len=text_max_len,
                     augment=False)
-    dl = DataLoader(ds, args.bs, num_workers=4, collate_fn=ds.collate_fn)
+    dl = DataLoader(ds, args.bs, num_workers=4, collate_fn=ds.collate_fn,
+                    drop_last=True)
 
     print('Model creation')
     model = create_model(c2i, i2c, ckpt['args']).to(device)
     model.load_state_dict(ckpt['model'])
     model.eval()
+    # model.decoder.fc[1].train()
     model_type = ckpt['args'].model_type
 
     print('This model metrics:')
