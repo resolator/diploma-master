@@ -12,8 +12,10 @@ from pathlib import Path
 from torch.utils.data import Dataset
 from xml.etree import ElementTree as ET
 
-# from .transforms import SkewCorrection, SlantCorrection, ContrastNormalization
-from transforms import SkewCorrection, SlantCorrection, ContrastNormalization
+try:
+    from transforms import SkewCorrection, SlantCorrection, ContrastNormalization
+except ModuleNotFoundError:
+    from .transforms import SkewCorrection, SlantCorrection, ContrastNormalization
 
 
 class IAMDataset(Dataset):
