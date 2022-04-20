@@ -117,7 +117,6 @@ class AttnRNNDecoder(nn.Module):
         self.dropout = nn.Dropout(dropout)
         self.fc = nn.Sequential(
             nn.Linear(self.hs, self.hs // 2),
-            nn.BatchNorm1d(self.hs // 2),
             nn.ReLU(),
             nn.Linear(self.hs // 2, alpb_size)
         )
