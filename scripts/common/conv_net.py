@@ -61,6 +61,15 @@ class ConvNet6(nn.Module):
         return self.fe(x)
 
     def freeze(self):
-        """Freeze network."""
+        """Freeze the network."""
         for param in self.parameters():
             param.requires_grad = False
+
+        print('\n[INFO] The backbone has been frozen.\n')
+
+    def defrost(self):
+        """Defrost the network."""
+        for param in self.parameters():
+            param.requires_grad = True
+
+        print('\n[INFO] The backbone has been defrost.\n')

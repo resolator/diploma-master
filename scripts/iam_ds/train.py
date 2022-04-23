@@ -36,8 +36,10 @@ def get_args():
                         help='Load only model from checkpoint.')
     parser.add_argument('--load-fe-only', action='store_true',
                         help='Load only Feature Extractor from checkpoint.')
-    parser.add_argument('--freeze-backbone', action='store_true',
-                        help='Freeze pretrained backbone.')
+    parser.add_argument('--freeze-backbone', type=int, default=-1,
+                        help='Freeze pretrained backbone for this number of '
+                             'epochs. Pass -1 for infinite freeze.'
+                             'Pass 0 to disable freezing.')
     parser.add_argument('--images-dir', type=Path, required=True,
                         help='Path to root dir with images (ex. iam/lines/).')
     parser.add_argument('--mkp-dir', type=Path, required=True,
@@ -143,23 +145,27 @@ def save_model(model, optim, args, ep, metrics, best_metrics, models_dir):
                 print(f'Saved {stage} {m}')
 
 
-def load_ckpt(ckpt_path, model, optim, device, model_only=False, fe_only=False):
+def load_ckpt(ckpt_path,
+              model,
+              optim,
+              device,
+              model_type,
+              model_only=False,
+              fe_only=False):
     ckpt = torch.load(ckpt_path, map_location=device)
     ep = 1
 
     if model_only:
         print('\nLoading model only')
         model.load_state_dict(ckpt['model'])
-        best_metrics = get_metrics_dict(model_type=ckpt['args'].model_type,
-                                        init_value=np.inf)
+        best_metrics = get_metrics_dict(model_type, init_value=np.inf)
     elif fe_only:
         print('\nLoading Features Extractor only')
         sd = {k.split('.', maxsplit=1)[1]: v
                 for k, v in ckpt['model'].items()
                 if k.split('.')[0] == 'fe'}
         model.fe.load_state_dict(sd)
-        best_metrics = get_metrics_dict(model_type=ckpt['args'].model_type,
-                                        init_value=np.inf)
+        best_metrics = get_metrics_dict(model_type, init_value=np.inf)
     else:
         print('\nLoading model, optim and best metrics')
         model.load_state_dict(ckpt['model'])
@@ -238,17 +244,19 @@ def main():
             model,
             optim,
             device,
+            args.model_type,
             args.load_model_only,
             args.load_fe_only
         )
 
         # freeze pretrained backbone
-        if args.freeze_backbone:
+        if args.freeze_backbone != 0:
             model.fe.freeze()
 
     # print the number of model's parameters
     print_model_params(model)
 
+    cur_training_epochs = 0  # number of completed epochs for the current launch
     while ep != args.epochs + 1:
         print(f'\nEpoch #{ep}')
         metrics = epoch_step(model, loaders, device, optim, writer, ep)
@@ -273,6 +281,11 @@ def main():
         writer.flush()
 
         ep += 1
+        cur_training_epochs += 1
+
+        # defrost if needed
+        if cur_training_epochs == args.freeze_backbone:
+            model.fe.defrost()
 
 
 if __name__ == '__main__':
