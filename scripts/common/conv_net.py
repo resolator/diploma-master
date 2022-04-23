@@ -55,7 +55,7 @@ class ConvNet6(nn.Module):
         Returns
         -------
         torch.tensor
-            Features map of shape (BS, 256, 1, W // 4).
+            Features map of shape (BS, out_channels, 1, W // 4).
         """
 
         return self.fe(x)
