@@ -4,6 +4,7 @@
 import fastwer
 from .baseline_net import BaselineNet
 from .seq2seq_model import Seq2seqModel
+from .seq2seq_light_model import Seq2seqLightModel
 from .seg_attn_model import SegAttnModel
 from string import digits, ascii_letters
 
@@ -30,33 +31,55 @@ def create_model(c2i, i2c, args):
     """Wrapper for creating different models."""
 
     if args.model_type == 'baseline':
-        model = BaselineNet(c2i, i2c, args.n_layers)
+        model = BaselineNet(
+            c2i=c2i,
+            i2c=i2c,
+            backbone_out=getattr(args, 'backbone_out', 256),
+            n_layers=args.n_layers)
     elif args.model_type == 'seq2seq':
-        model = Seq2seqModel(c2i=c2i,
-                             i2c=i2c,
-                             text_max_len=args.text_max_len,
-                             enc_hs=args.enc_hs,
-                             dec_hs=args.dec_hs,
-                             attn_sz=args.attn_size,
-                             emb_size=args.emb_size,
-                             enc_n_layers=args.enc_layers,
-                             pe=args.pos_encoding,
-                             teacher_rate=args.teacher_rate,
-                             fe_dropout=getattr(args, 'fe_dropout', 0.15))
+        model = Seq2seqModel(
+            c2i=c2i,
+            i2c=i2c,
+            text_max_len=args.text_max_len,
+            backbone_out=getattr(args, 'backbone_out', 256),
+            enc_hs=args.enc_hs,
+            dec_hs=args.dec_hs,
+            attn_sz=args.attn_size,
+            emb_size=args.emb_size,
+            enc_n_layers=args.enc_layers,
+            pe=args.pos_encoding,
+            teacher_rate=args.teacher_rate,
+            fe_dropout=getattr(args, 'fe_dropout', 0.15)
+        )
+    elif args.model_type == 'seq2seq_light':
+        model = Seq2seqLightModel(
+            c2i=c2i,
+            i2c=i2c,
+            text_max_len=args.text_max_len,
+            backbone_out=getattr(args, 'backbone_out', 512),
+            dec_hs=args.dec_hs,
+            attn_sz=args.attn_size,
+            emb_size=args.emb_size,
+            pe=args.pos_encoding,
+            teacher_rate=args.teacher_rate,
+            fe_dropout=getattr(args, 'fe_dropout', 0.15)
+        )
     elif args.model_type == 'seg_attn':
-        model = SegAttnModel(c2i=c2i,
-                             i2c=i2c,
-                             text_max_len=args.text_max_len,
-                             backbone=getattr(args, 'backbone', 'custom'),
-                             backbone_out=args.backbone_out,
-                             dec_dropout=args.dec_dropout,
-                             teacher_rate=args.teacher_rate,
-                             decoder_type=args.decoder_type,
-                             fe_dropout=args.fe_dropout,
-                             emb_size=args.emb_size)
+        model = SegAttnModel(
+            c2i=c2i,
+            i2c=i2c,
+            text_max_len=args.text_max_len,
+            backbone=getattr(args, 'backbone', 'custom'),
+            backbone_out=getattr(args, 'backbone_out', 256),
+            dec_dropout=args.dec_dropout,
+            teacher_rate=args.teacher_rate,
+            decoder_type=args.decoder_type,
+            fe_dropout=args.fe_dropout,
+            emb_size=args.emb_size
+        )
     else:
         raise AssertionError(
-            'model type must be in [baseline, seq2seq, seg_attn]'
+            'model type must be in [baseline, seq2seq, seq2seq_light, seg_attn]'
         )
 
     return model

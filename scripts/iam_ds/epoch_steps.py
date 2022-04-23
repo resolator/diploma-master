@@ -14,7 +14,7 @@ from common.utils import calc_cer
 
 
 def get_epoch_step_fn(model_type='baseline'):
-    if model_type == 'seq2seq':
+    if model_type in ['seq2seq', 'seq2seq_light']:
         return epoch_step_seq2seq
     elif model_type == 'seg_attn':
         return epoch_step_seg_attn
@@ -23,7 +23,7 @@ def get_epoch_step_fn(model_type='baseline'):
 
 
 def get_metrics_dict(model_type='baseline', init_value=0.0):
-    if model_type in ['seq2seq', 'seg_attn']:
+    if model_type in ['seq2seq', 'seg_attn', 'seq2seq_light']:
         return {'cer': {'train': init_value, 'valid': init_value},
                 'loss': {'train': init_value, 'valid': init_value}}
     else:

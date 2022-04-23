@@ -27,7 +27,8 @@ def get_args():
 
     # dataset
     parser.add_argument('--model-type', required=True,
-                        choices=['baseline', 'seq2seq', 'seg_attn'],
+                        choices=['baseline', 'seq2seq',
+                                 'seq2seq_light', 'seg_attn'],
                         help='Model type to train.')
     parser.add_argument('--ckpt-path', type=Path,
                         help='Path to saved model to load for training.')
@@ -66,6 +67,8 @@ def get_args():
     parser.add_argument('--img-max-width', type=int, default=1408,
                         help='Max width of images. '
                              'Needed for stable validation process.')
+    parser.add_argument('--backbone-out', type=int, default=256,
+                        help='Backbone out channels number (for custom only).')
 
     parser.add_argument('--save-to', type=Path,
                         help='Path to save dir.')
@@ -116,8 +119,6 @@ def get_args():
                           choices=['custom', 'resnet18',
                                    'resnet34', 'efficientnet_b0'],
                           help='Backbone type.')
-    seg_attn.add_argument('--backbone-out', type=int, default=256,
-                          help='Backbone out channels number (for custom only).')
 
     return parser.parse_args()
 
@@ -190,7 +191,7 @@ def main():
     if torch.cuda.is_available():
         device = torch.device('cuda')
 
-    if args.model_type in ['seq2seq', 'seg_attn']:
+    if args.model_type in ['seq2seq', 'seg_attn', 'seq2seq_light']:
         c2i, i2c = build_alphabet(light=False,
                                   with_ctc_blank=False,
                                   with_sos=True)

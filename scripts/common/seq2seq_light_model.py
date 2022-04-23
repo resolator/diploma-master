@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*
-"""Seq2Seq model with Bahdanau attention."""
+"""Seq2Seq model with Bahdanau attention and no Encoder."""
 import torch
 import numpy as np
 from torch import nn
@@ -8,17 +8,15 @@ from torch.nn import functional as F
 from .conv_net import ConvNet6
 
 
-class Seq2seqModel(nn.Module):
+class Seq2seqLightModel(nn.Module):
     def __init__(self,
                  c2i,
                  i2c,
                  text_max_len,
-                 backbone_out=256,
-                 enc_hs=128,
+                 backbone_out=512,
                  dec_hs=256,
                  attn_sz=256,
                  emb_size=128,
-                 enc_n_layers=1,
                  dropout_p=0.1,
                  pe=False,
                  teacher_rate=0.9,
@@ -30,14 +28,11 @@ class Seq2seqModel(nn.Module):
         alpb_size = len(self.i2c)
 
         self.fe = ConvNet6(out_channels=backbone_out, dropout=fe_dropout)
-        self.encoder = Encoder(input_sz=backbone_out,
-                               hs=enc_hs,
-                               n_layers=enc_n_layers)
-        self.pe = PositionalEncoder(enc_hs * 2) if pe else None
+        self.pe = PositionalEncoder(backbone_out) if pe else None
         self.decoder = Decoder(text_max_len=text_max_len,
                                sos_idx=sos_idx,
                                emb_sz=emb_size,
-                               enc_hs=enc_hs * 2,
+                               enc_hs=backbone_out,
                                dec_hs=dec_hs,
                                attn_sz=attn_sz,
                                alphabet_size=alpb_size,
@@ -58,33 +53,12 @@ class Seq2seqModel(nn.Module):
         return torch.mean(loss[mask])
 
     def forward(self, x, target_seq=None):
-        y = self.fe(x).squeeze(2)
-        y = self.encoder(y)
+        y = self.fe(x).squeeze(2)  # (BS, 256, W)
 
         if self.pe is not None:
             y = self.pe(y)
 
         return self.decoder(y, target_seq)
-
-
-class Encoder(nn.Module):
-    def __init__(self, input_sz=256, hs=256, n_layers=2):
-        super().__init__()
-        print('========== Encoder args ==========')
-        print('input_sz: {}; hs: {}; n_layers: {};'.format(
-            input_sz, hs, n_layers
-        ))
-        self.lstm = nn.LSTM(input_sz,
-                            hs,
-                            num_layers=n_layers,
-                            bidirectional=True)
-
-    def forward(self, x):
-        # BS, C, W
-        x = x.permute(2, 0, 1)  # W, BS, C
-        y, _ = self.lstm(x)  # W, BS, 2HS
-
-        return y.permute(1, 2, 0)  # BS, 2HS, W
 
 
 class Decoder(nn.Module):
@@ -120,9 +94,6 @@ class Decoder(nn.Module):
                                 hidden_size=self.dec_hs)
 
         self.attention = BahdanauAttention(enc_hs, self.dec_hs, attn_sz)
-
-        # self.linear_1 = nn.Linear(self.emb_size + self.hs + self.hs, self.hs)
-        # self.linear_2 = nn.Linear(self.hs, self.alphabet_size)
         self.linear = nn.Linear(self.dec_hs, alphabet_size)
 
     def forward_step(self, x, enc_out, weighted_enc_out, hc):
@@ -132,9 +103,6 @@ class Decoder(nn.Module):
         rnn_x = torch.cat([x, context], dim=1)
         h, c = self.lstm(rnn_x, hc)
 
-        # pre_output = torch.cat([x, h, context], dim=1)
-        # pre_output = self.dropout(pre_output)
-        # logits = self.linear_1(pre_output)
         logits = self.linear(h)
 
         return logits, (h, c), attn_probs
@@ -161,7 +129,6 @@ class Decoder(nn.Module):
 
             # BS, HS
             log_probs = F.log_softmax(output, dim=-1)
-            # log_probs = F.log_softmax(self.linear_2(output), dim=-1)
             logs_probs.append(log_probs)
             _, next_word = torch.max(log_probs, dim=1)
             preds.append(next_word)
