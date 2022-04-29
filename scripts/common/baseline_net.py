@@ -11,20 +11,26 @@ from ctcdecode import CTCBeamDecoder
 
 
 class BaselineNet(nn.Module):
-    def __init__(self, c2i, i2c, backbone_out=256, n_layers=2):
+    def __init__(self,
+                 c2i,
+                 i2c,
+                 backbone_out=256,
+                 n_layers=2,
+                 dec_hs=256,
+                 fe_dropout=0.15):
         super().__init__()
 
         self.c2i = c2i
         self.i2c = i2c
         alpb_size = len(self.i2c)
 
-        self.fe = ConvNet6(out_channels=backbone_out, dropout=0.15)
+        self.fe = ConvNet6(out_channels=backbone_out, dropout=fe_dropout)
         self.rnn = nn.LSTM(input_size=backbone_out,
-                           hidden_size=256,
+                           hidden_size=dec_hs,
                            num_layers=n_layers,
                            bidirectional=True)
         self.dropout = nn.Dropout(0.15)
-        self.conv = nn.Conv2d(512, alpb_size, (1, 1))
+        self.conv = nn.Conv2d(dec_hs * 2, alpb_size, (1, 1))
 
         self.loss_fn = nn.CTCLoss(zero_infinity=True)
         self.ctc_decoder = CTCBeamDecoder(self.i2c,

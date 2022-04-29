@@ -69,10 +69,14 @@ def get_args():
     parser.add_argument('--img-max-width', type=int, default=1408,
                         help='Max width of images. '
                              'Needed for stable validation process.')
+
+    # common models args
     parser.add_argument('--backbone-out', type=int, default=256,
                         help='Backbone out channels number (for custom only).')
     parser.add_argument('--fe-dropout', type=float, default=0.15,
                         help='Dropout for the end of Backbone.')
+    parser.add_argument('--dec-hs', type=int, default=256,
+                        help='Decoder hidden size.')
 
     parser.add_argument('--save-to', type=Path,
                         help='Path to save dir.')
@@ -93,8 +97,6 @@ def get_args():
                          help='Add positional encoding before decoder.')
     seq2seq.add_argument('--enc-hs', type=int, default=128,
                          help='(bidirectional) Encoder hidden size.')
-    seq2seq.add_argument('--dec-hs', type=int, default=256,
-                         help='Decoder hidden size.')
     seq2seq.add_argument('--attn-size', type=int, default=256,
                          help='Attention size.')
     seq2seq.add_argument('--emb-size', type=int, default=128,

@@ -15,6 +15,7 @@ class SegAttnModel(nn.Module):
                  text_max_len=98,
                  backbone='custom',
                  backbone_out=256,
+                 dec_hs=512,
                  dec_dropout=0.15,
                  teacher_rate=1.0,
                  decoder_type='attn_rnn',
@@ -42,6 +43,7 @@ class SegAttnModel(nn.Module):
         decoder_args = {'c2i': c2i,
                         'i2c': i2c,
                         'x_size': self.backbone_out,
+                        'h_size': dec_hs,
                         'sos_idx': self.sos_idx,
                         'dropout': dec_dropout,
                         'text_max_len': text_max_len,
@@ -82,6 +84,7 @@ class AttnRNNDecoder(nn.Module):
                  x_size=256,
                  h_size=512,
                  emb_size=256,
+                 attn_size=256,
                  dropout=0.15,
                  sos_idx=1,
                  text_max_len=98,
@@ -104,19 +107,22 @@ class AttnRNNDecoder(nn.Module):
         self.hs = h_size
 
         self.emb = nn.Embedding(alpb_size, emb_size)
-        attn_size = 256
+        self.emb_postproc = nn.Sequential(
+            FlexibleLayerNorm(-1),
+            nn.Dropout(dropout)
+        )
         self.attention = Attention(h_dec_size=self.hs,
                                    channels=x_size,
                                    out_size=attn_size)
         self.cat_linear = nn.Sequential(
-            nn.ReLU(),
-            nn.Linear(emb_size + attn_size, emb_size + attn_size)
+            nn.Linear(emb_size + attn_size, emb_size + attn_size),
+            FlexibleLayerNorm(-1)
         )
         self.rnn = nn.LSTMCell(input_size=emb_size + attn_size,
                                hidden_size=self.hs)
-        self.dropout = nn.Dropout(dropout)
         self.fc = nn.Sequential(
             nn.Linear(self.hs, self.hs // 2),
+            FlexibleLayerNorm(-1),
             nn.ReLU(),
             nn.Linear(self.hs // 2, alpb_size)
         )
@@ -140,7 +146,7 @@ class AttnRNNDecoder(nn.Module):
 
         attentions, log_probs, preds = [], [], []
         for i in range(self.text_max_len):
-            y_emb = self.dropout(self.emb(y))  # (BS, 256)
+            y_emb = self.emb_postproc(self.emb(y))  # (BS, 256)
             (h, c), heat_map = self.forward_step(y_emb, (h, c), fm)
             attentions.append(heat_map)
 
@@ -269,13 +275,16 @@ class Attention(nn.Module):
             h_dec_size, channels, out_size
         ))
 
-        self.h_dec_proc = nn.Linear(h_dec_size, channels)
+        self.h_dec_proc = nn.Sequential(
+            FlexibleLayerNorm(-1),
+            nn.Linear(h_dec_size, channels),
+            nn.ReLU()
+        )
         self.summed_x_proc = nn.Sequential(
-            nn.Conv2d(2 * channels, channels, (1, 1)),
-            nn.ReLU(),
             nn.Conv2d(channels, channels // 2, (1, 1)),
+            FlexibleLayerNorm([-3, -2, -1]),  # (C, H, W)
             nn.ReLU(),
-            nn.Conv2d(channels // 2, 1, (1, 1))
+            nn.Conv2d(channels // 2, 1, (1, 1)),
         )
         self.attended_proc = nn.Sequential(
             nn.ReLU(),
@@ -309,17 +318,40 @@ class Attention(nn.Module):
         assert len(h_dec.shape) == 2, "invalid number of shape for h_dec"
 
         weighted_h_dec = self.h_dec_proc(h_dec).unsqueeze(-1).unsqueeze(-1)
-        repeated_h_dec = weighted_h_dec.repeat(1, 1, fm.size(2), fm.size(3))
 
-        concated = torch.cat([fm, repeated_h_dec], dim=1)  # BS, 2C, H, W
-        attn_map = self.summed_x_proc(concated).squeeze(1)  # BS, H, W
+        summed = fm + weighted_h_dec  # BS, C, H, W
+        attn_map = self.summed_x_proc(summed).squeeze(1)  # BS, H, W
 
         heat_map = F.softmax(attn_map.flatten(1),
                              dim=1).reshape(attn_map.shape)
 
-        attn = fm * heat_map.unsqueeze(1)
+        attn = fm * heat_map.unsqueeze(1)  # BS, C, H, W
         attn_proc = self.attended_proc(attn)
         summed = attn_proc.sum(dim=[2, 3])
         context = self.summed_proc(summed)
 
         return context, heat_map
+
+
+class FlexibleLayerNorm(nn.Module):
+    def __init__(self, dim, eps=1e-5):
+        """Flexible LayerNorm.
+
+        Parameters
+        ----------
+        dim : int, list
+            Number of dimensions to perform the norm, by default -1
+        eps : float
+            Epsilon, by default 1e-5
+
+        """
+        super().__init__()
+
+        self.eps = eps
+        self.dim = dim
+
+    def forward(self, x):
+        mean = x.mean(self.dim, keepdim=True)
+        std = x.std(self.dim, keepdim=True)
+
+        return (x - mean) / (std + self.eps)

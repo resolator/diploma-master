@@ -30,52 +30,48 @@ def build_alphabet(light=True, with_ctc_blank=True, with_sos=False):
 def create_model(c2i, i2c, args):
     """Wrapper for creating different models."""
 
+    common_args = {
+        'c2i': c2i,
+        'i2c': i2c,
+        'dec_hs': getattr(args, 'dec_hs',
+                          512 if args.model_type == 'seg_attn' else 256),
+        'backbone_out': getattr(args, 'backbone_out', 256),
+        'fe_dropout': getattr(args, 'fe_dropout', 0.15)
+    }
     if args.model_type == 'baseline':
         model = BaselineNet(
-            c2i=c2i,
-            i2c=i2c,
-            backbone_out=getattr(args, 'backbone_out', 256),
-            n_layers=args.n_layers)
+            n_layers=args.n_layers,
+            **common_args
+        )
     elif args.model_type == 'seq2seq':
         model = Seq2seqModel(
-            c2i=c2i,
-            i2c=i2c,
             text_max_len=args.text_max_len,
-            backbone_out=getattr(args, 'backbone_out', 256),
             enc_hs=args.enc_hs,
-            dec_hs=args.dec_hs,
             attn_sz=args.attn_size,
             emb_size=args.emb_size,
             enc_n_layers=args.enc_layers,
             pe=args.pos_encoding,
             teacher_rate=args.teacher_rate,
-            fe_dropout=getattr(args, 'fe_dropout', 0.15)
+            **common_args
         )
     elif args.model_type == 'seq2seq_light':
         model = Seq2seqLightModel(
-            c2i=c2i,
-            i2c=i2c,
             text_max_len=args.text_max_len,
-            backbone_out=getattr(args, 'backbone_out', 512),
-            dec_hs=args.dec_hs,
             attn_sz=args.attn_size,
             emb_size=args.emb_size,
             pe=args.pos_encoding,
             teacher_rate=args.teacher_rate,
-            fe_dropout=getattr(args, 'fe_dropout', 0.15)
+            **common_args
         )
     elif args.model_type == 'seg_attn':
         model = SegAttnModel(
-            c2i=c2i,
-            i2c=i2c,
             text_max_len=args.text_max_len,
             backbone=getattr(args, 'backbone', 'custom'),
-            backbone_out=getattr(args, 'backbone_out', 256),
             dec_dropout=args.dec_dropout,
             teacher_rate=args.teacher_rate,
             decoder_type=args.decoder_type,
-            fe_dropout=getattr(args, 'fe_dropout', 0.15),
-            emb_size=args.emb_size
+            emb_size=args.emb_size,
+            **common_args
         )
     else:
         raise AssertionError(
