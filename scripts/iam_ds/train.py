@@ -71,6 +71,8 @@ def get_args():
                              'Needed for stable validation process.')
     parser.add_argument('--backbone-out', type=int, default=256,
                         help='Backbone out channels number (for custom only).')
+    parser.add_argument('--fe-dropout', type=float, default=0.15,
+                        help='Dropout for the end of Backbone.')
 
     parser.add_argument('--save-to', type=Path,
                         help='Path to save dir.')
@@ -108,8 +110,6 @@ def get_args():
                           help='Path to seg_attn config file.')
     seg_attn.add_argument('--dec-dropout', type=float, default=0.15,
                           help='Dropout for the Decoder.')
-    seg_attn.add_argument('--fe-dropout', type=float, default=0.0,
-                          help='Dropout for the end of Features Extractor.')
     seg_attn.add_argument('--teacher-rate', type=float, default=1.0,
                           help='Teacher rate for decoder training input.')
     seg_attn.add_argument('--decoder-type', default='attn_rnn',

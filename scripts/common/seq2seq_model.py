@@ -118,11 +118,7 @@ class Decoder(nn.Module):
 
         self.lstm = nn.LSTMCell(input_size=emb_sz + enc_hs,
                                 hidden_size=self.dec_hs)
-
         self.attention = BahdanauAttention(enc_hs, self.dec_hs, attn_sz)
-
-        # self.linear_1 = nn.Linear(self.emb_size + self.hs + self.hs, self.hs)
-        # self.linear_2 = nn.Linear(self.hs, self.alphabet_size)
         self.linear = nn.Linear(self.dec_hs, alphabet_size)
 
     def forward_step(self, x, enc_out, weighted_enc_out, hc):
@@ -131,10 +127,6 @@ class Decoder(nn.Module):
         context, attn_probs = self.attention(dec_h, weighted_enc_out, enc_out)
         rnn_x = torch.cat([x, context], dim=1)
         h, c = self.lstm(rnn_x, hc)
-
-        # pre_output = torch.cat([x, h, context], dim=1)
-        # pre_output = self.dropout(pre_output)
-        # logits = self.linear_1(pre_output)
         logits = self.linear(h)
 
         return logits, (h, c), attn_probs
@@ -161,7 +153,6 @@ class Decoder(nn.Module):
 
             # BS, HS
             log_probs = F.log_softmax(output, dim=-1)
-            # log_probs = F.log_softmax(self.linear_2(output), dim=-1)
             logs_probs.append(log_probs)
             _, next_word = torch.max(log_probs, dim=1)
             preds.append(next_word)

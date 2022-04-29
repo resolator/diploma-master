@@ -74,7 +74,7 @@ def create_model(c2i, i2c, args):
             dec_dropout=args.dec_dropout,
             teacher_rate=args.teacher_rate,
             decoder_type=args.decoder_type,
-            fe_dropout=args.fe_dropout,
+            fe_dropout=getattr(args, 'fe_dropout', 0.15),
             emb_size=args.emb_size
         )
     else:
