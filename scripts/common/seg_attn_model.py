@@ -58,7 +58,6 @@ class SegAttnModel(nn.Module):
         fm = self.fe(x)
 
         if self.pe is not None:
-            print('Apply')
             fm = self.pe(fm)
 
         log_probs, preds, attentions = self.decoder(fm, target_seq)
