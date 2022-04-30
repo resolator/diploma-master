@@ -120,6 +120,8 @@ def get_args():
                           choices=['custom', 'resnet18',
                                    'resnet34', 'efficientnet_b0'],
                           help='Backbone type.')
+    seg_attn.add_argument('--pos-encoding', action='store_true',
+                          help='Add positional encoding before decoder.')
 
     return parser.parse_args()
 

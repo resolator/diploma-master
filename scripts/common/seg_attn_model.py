@@ -3,6 +3,7 @@
 """Network with custom attention."""
 import timm
 import torch
+import numpy as np
 from torch import nn
 from torch.nn import functional as F
 from .conv_net import ConvNet6
@@ -19,7 +20,8 @@ class SegAttnModel(nn.Module):
                  dec_dropout=0.15,
                  teacher_rate=1.0,
                  fe_dropout=0.0,
-                 emb_size=256):
+                 emb_size=256,
+                 pos_enc=False):
         super().__init__()
 
         self.c2i = c2i
@@ -39,6 +41,7 @@ class SegAttnModel(nn.Module):
                                         global_pool='')
             self.backbone_out = self.fe.num_features
 
+        self.pe = PositionalEncoder(self.backbone_out) if pos_enc else None
         decoder_args = {'c2i': c2i,
                         'i2c': i2c,
                         'x_size': self.backbone_out,
@@ -53,6 +56,11 @@ class SegAttnModel(nn.Module):
 
     def forward(self, x, target_seq=None):
         fm = self.fe(x)
+
+        if self.pe is not None:
+            print('Apply')
+            fm = self.pe(fm)
+
         log_probs, preds, attentions = self.decoder(fm, target_seq)
 
         return log_probs, preds, attentions
@@ -259,3 +267,38 @@ class FlexibleLayerNorm(nn.Module):
         std = x.std(self.dim, keepdim=True)
 
         return (x - mean) / (std + self.eps)
+
+
+class PositionalEncoder(nn.Module):
+    def __init__(self, d_model, max_len=512):
+        """Positional encoding layer.
+
+        Parameters
+        ----------
+        d_model : int
+            Number of channels for the output from layer before this.
+        max_len : int, optional
+            Maximal length of the layer before, by default 512.
+
+        """
+        super().__init__()
+
+        position = torch.arange(max_len)
+        a = torch.arange(0, d_model, 2) * (-np.log(10000.0) / d_model)
+        div_term = torch.exp(a).unsqueeze(1)
+
+        pe = torch.zeros(1, d_model, max_len)
+        pe[0, 0::2, :] = torch.cos(position * div_term)
+        pe[0, 1::2, :] = torch.sin(position * div_term)
+
+        self.register_buffer('pe', pe)
+
+    def forward(self, x):
+        if len(x.shape) == 3:
+            return x + self.pe[:, :, :x.size(-1)]  # BS, C, W
+        elif len(x.shape) == 4:
+            return x + self.pe[:, :, :x.size(-1)].unsqueeze(2)  # BS, C, H, W
+        else:
+            raise AssertionError(
+                'input shape must be 3 (for sequences) or 4 (for images).'
+            )

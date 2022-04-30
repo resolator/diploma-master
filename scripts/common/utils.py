@@ -50,7 +50,7 @@ def create_model(c2i, i2c, args):
             attn_sz=args.attn_size,
             emb_size=args.emb_size,
             enc_n_layers=args.enc_layers,
-            pe=args.pos_encoding,
+            pe=getattr(args, 'pos_encoding', False),
             teacher_rate=args.teacher_rate,
             **common_args
         )
@@ -59,7 +59,7 @@ def create_model(c2i, i2c, args):
             text_max_len=args.text_max_len,
             attn_sz=args.attn_size,
             emb_size=args.emb_size,
-            pe=args.pos_encoding,
+            pe=getattr(args, 'pos_encoding', False),
             teacher_rate=args.teacher_rate,
             **common_args
         )
@@ -70,6 +70,7 @@ def create_model(c2i, i2c, args):
             dec_dropout=args.dec_dropout,
             teacher_rate=args.teacher_rate,
             emb_size=args.emb_size,
+            pos_enc=getattr(args, 'pos_encoding', False),
             **common_args
         )
     else:
