@@ -69,7 +69,6 @@ def create_model(c2i, i2c, args):
             backbone=getattr(args, 'backbone', 'custom'),
             dec_dropout=args.dec_dropout,
             teacher_rate=args.teacher_rate,
-            decoder_type=args.decoder_type,
             emb_size=args.emb_size,
             **common_args
         )

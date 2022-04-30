@@ -18,7 +18,6 @@ class SegAttnModel(nn.Module):
                  dec_hs=512,
                  dec_dropout=0.15,
                  teacher_rate=1.0,
-                 decoder_type='attn_rnn',
                  fe_dropout=0.0,
                  emb_size=256):
         super().__init__()
@@ -49,12 +48,7 @@ class SegAttnModel(nn.Module):
                         'text_max_len': text_max_len,
                         'teacher_rate': teacher_rate,
                         'emb_size': emb_size}
-
-        if decoder_type == 'attn_rnn':
-            self.decoder = AttnRNNDecoder(**decoder_args)
-        else:
-            self.decoder = AttnFCDecoder(**decoder_args)
-
+        self.decoder = AttnRNNDecoder(**decoder_args)
         self.loss_fn = nn.NLLLoss(reduction='none', ignore_index=self.sos_idx)
 
     def forward(self, x, target_seq=None):
@@ -151,96 +145,6 @@ class AttnRNNDecoder(nn.Module):
             attentions.append(heat_map)
 
             step_logits = self.fc(h)
-
-            step_log_probs = F.log_softmax(step_logits, dim=-1)
-            log_probs.append(step_log_probs)
-
-            _, pred = torch.max(step_log_probs, dim=1)
-            preds.append(pred)
-
-            # select next input
-            teach = torch.rand(1)[0].item() < self.teacher_rate
-            if (target_seq is not None) and self.training and teach:
-                y = target_seq[:, i]
-            else:
-                y = pred
-
-        # BS, C, text_max_len
-        # BS, text_max_len
-        # BS, text_max_len, H, W
-        return (torch.stack(log_probs).permute(1, 2, 0),
-                torch.stack(preds).permute(1, 0),
-                torch.stack(attentions).permute(1, 0, 2, 3))
-
-    def init_hidden(self, bs, device):
-        return torch.zeros(2, bs, self.hs,
-                           dtype=torch.float, device=device)
-
-
-class AttnFCDecoder(nn.Module):
-    def __init__(self,
-                 c2i,
-                 i2c,
-                 x_size=256,
-                 h_size=512,
-                 emb_size=256,
-                 dropout=0.15,
-                 sos_idx=1,
-                 text_max_len=98,
-                 teacher_rate=1.0):
-        super().__init__()
-        print('========== AttnFCDecoder args ==========')
-        print('x_size: {}; h_size: {}; emb_size: {}; dropout: {}; '
-              'text_max_len: {};'.format(
-            x_size, h_size, emb_size, dropout, text_max_len
-        ))
-
-        self.teacher_rate = teacher_rate
-        self.text_max_len = text_max_len
-        self.c2i = c2i
-        self.i2c = i2c
-        alpb_size = len(self.i2c)
-        self.sos_idx = sos_idx
-
-        self.n_layers = 1
-        self.hs = h_size
-
-        self.emb = nn.Embedding(alpb_size, emb_size)
-        self.attention = Attention(h_dec_size=h_size,
-                                   channels=x_size,
-                                   out_size=emb_size)
-        self.rnn = nn.LSTMCell(input_size=emb_size,
-                               hidden_size=self.hs)
-        self.dropout = nn.Dropout(dropout)
-        self.attn_dropout = nn.Dropout(dropout)
-        self.fc = nn.Linear(h_size, h_size)
-        self.attn_linear = nn.Linear(emb_size, h_size)
-        self.relu = nn.ReLU()
-        self.bn = nn.BatchNorm1d(h_size + h_size)
-        self.last_fc = nn.Linear(h_size + h_size, alpb_size)
-
-    def forward(self, fm, target_seq=None):
-        bs = fm.size(0)
-        h, c = self.init_hidden(bs, fm.device)
-        y = torch.ones(
-            (bs,),
-            dtype=torch.int64,
-            device=fm.device
-        ) * self.sos_idx
-
-        attentions, log_probs, preds = [], [], []
-        for i in range(self.text_max_len):
-            y_emb = self.emb(y)  # (BS, 256)
-            h, c = self.rnn(y_emb, (h, c))
-
-            attn, heat_map = self.attention(h, fm)
-            attentions.append(heat_map)
-
-            weighted_attn = self.attn_linear(self.attn_dropout(attn))
-            pre_logits = self.fc(self.dropout(h))
-            pre_logits = torch.cat([pre_logits, weighted_attn], dim=1)
-            pre_logits = self.relu(self.bn(pre_logits))
-            step_logits = self.last_fc(pre_logits)
 
             step_log_probs = F.log_softmax(step_logits, dim=-1)
             log_probs.append(step_log_probs)

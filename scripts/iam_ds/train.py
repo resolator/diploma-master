@@ -114,9 +114,6 @@ def get_args():
                           help='Dropout for the Decoder.')
     seg_attn.add_argument('--teacher-rate', type=float, default=1.0,
                           help='Teacher rate for decoder training input.')
-    seg_attn.add_argument('--decoder-type', default='attn_rnn',
-                          choices=['attn_rnn', 'attn_fc'],
-                          help='Decoder type.')
     seg_attn.add_argument('--emb-size', type=int, default=256,
                           help='Embedding size.')
     seg_attn.add_argument('--backbone', default='custom',
