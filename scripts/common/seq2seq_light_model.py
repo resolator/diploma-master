@@ -6,6 +6,7 @@ import numpy as np
 from torch import nn
 from torch.nn import functional as F
 from .conv_net import ConvNet6
+from .layers import PositionalEncoder
 
 
 class Seq2seqLightModel(nn.Module):
@@ -166,21 +167,3 @@ class BahdanauAttention(nn.Module):
         context = torch.bmm(enc_out, alphas.permute(0, 2, 1))
 
         return context.squeeze(2), alphas.squeeze(1)  # BS, enc_hs; BS, W
-
-
-class PositionalEncoder(nn.Module):
-    def __init__(self, d_model, max_len=512):
-        super().__init__()
-
-        position = torch.arange(max_len)
-        a = torch.arange(0, d_model, 2) * (-np.log(10000.0) / d_model)
-        div_term = torch.exp(a).unsqueeze(1)
-
-        pe = torch.zeros(1, d_model, max_len)
-        pe[0, 0::2, :] = torch.sin(position * div_term)
-        pe[0, 1::2, :] = torch.cos(position * div_term)
-
-        self.register_buffer('pe', pe)
-
-    def forward(self, x):
-        return x + self.pe[:, :, :x.size(2)]
