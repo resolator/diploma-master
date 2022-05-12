@@ -28,7 +28,8 @@ class IAMDataset(Dataset):
                  height=64,
                  width=None,
                  max_len=300,
-                 augment=False):
+                 augment=False,
+                 return_path=False):
         """Initialize IAM dataset.
 
         Parameters
@@ -49,9 +50,12 @@ class IAMDataset(Dataset):
         max_len : int
             Maximal length for text sequence.
         augment : bool
-            Auggment images.
+            Augment images.
+        return_path : bool
+            Return the path of an image in __getitem__.
 
         """
+        self.return_path = return_path
         self.i2c = i2c
         self.c2i = {c: idx for idx, c in enumerate(self.i2c)}
 
@@ -120,6 +124,9 @@ class IAMDataset(Dataset):
         text = self.markup[idx]
         length = self.lens[idx]
 
+        if self.return_path:
+            return img, text, length, img_path
+
         return img, text, length
 
     def _read_markup(self, markup_dir):
@@ -172,11 +179,18 @@ class IAMDataset(Dataset):
         texts = torch.stack([x[1] for x in batch])
         lens = torch.stack([x[2] for x in batch])
 
+        paths = None
+        if len(batch[0]) == 4:
+            paths = [x[3] for x in batch]
+
         images = [x[0] for x in batch]
         widths = [x.size(2) for x in images]
         max_width = torch.max(torch.tensor(widths)).long()
         images = [F.pad(x, (0, max_width - x.size(2)), 'replicate')
                   for x in images]
+
+        if paths is not None:
+            return torch.stack(images), texts, lens, paths
 
         return torch.stack(images), texts, lens
 
