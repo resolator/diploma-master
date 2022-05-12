@@ -29,6 +29,7 @@ class IAMDataset(Dataset):
                  width=None,
                  max_len=300,
                  augment=False,
+                 correction=True,
                  return_path=False):
         """Initialize IAM dataset.
 
@@ -51,6 +52,8 @@ class IAMDataset(Dataset):
             Maximal length for text sequence.
         augment : bool
             Augment images.
+        correction : bool
+            Correct slant, skew and contrast.
         return_path : bool
             Return the path of an image in __getitem__.
 
@@ -73,6 +76,12 @@ class IAMDataset(Dataset):
 
         self.markup, self.lens = self._read_markup(markup_dir)
 
+        corr_transform = albu.Compose([
+            SkewCorrection(p=1),
+            SlantCorrection(p=1),
+            ContrastNormalization(p=1)
+        ]) if correction else albu.Compose([])
+
         if self.augment:
             self.transform = albu.Compose([
                 albu.CropAndPad([[12, 20], [24, 40], [12, 20], [24, 40]],
@@ -88,19 +97,16 @@ class IAMDataset(Dataset):
                 albu.CLAHE(),
                 albu.Emboss(),
                 albu.RandomBrightnessContrast(),
-                SkewCorrection(p=1),
-                SlantCorrection(p=1),
-                ContrastNormalization(p=1)
+                corr_transform
             ])
         else:
             self.transform = albu.Compose([
                 albu.CropAndPad([16, 32, 16, 32],
-                                pad_mode=cv2.BORDER_REPLICATE,
+                                pad_mode=cv2.BORDER_CONSTANT,
+                                pad_cval=255,
                                 keep_size=False),
                 albu.SmallestMaxSize(self.height),
-                SkewCorrection(p=1),
-                SlantCorrection(p=1),
-                ContrastNormalization(p=1)
+                corr_transform
             ])
 
     def __len__(self):

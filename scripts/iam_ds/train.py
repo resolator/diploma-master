@@ -62,6 +62,8 @@ def get_args():
                         help='Number of data loader workers.')
     parser.add_argument('--augment', action='store_true',
                         help='Augment images.')
+    parser.add_argument('--correction', action='store_true',
+                        help='Correct slant, skew and contrast.')
     parser.add_argument('--text-max-len', type=int, default=98,
                         help='Max length of text.')
     parser.add_argument('--height', type=int, default=64,
@@ -216,7 +218,8 @@ def main():
                'markup_dir': args.mkp_dir,
                'height': args.height,
                'i2c': i2c,
-               'max_len': args.text_max_len}
+               'max_len': args.text_max_len,
+               'correction': args.correction}
     ds_train = IAMDataset(split_filepath=args.train_split,
                           augment=args.augment,
                           **ds_args)
@@ -225,10 +228,8 @@ def main():
                           **ds_args)
 
     dl_args = {'batch_size': args.bs,
-               'num_workers': args.workers,
-               'shuffle': True,
-               'drop_last': True}
-    loaders = {'train': DataLoader(ds_train,
+               'num_workers': args.workers}
+    loaders = {'train': DataLoader(ds_train, shuffle=True,
                                    collate_fn=ds_train.collate_fn, **dl_args),
                'valid': DataLoader(ds_valid,
                                    collate_fn=ds_valid.collate_fn, **dl_args)}
