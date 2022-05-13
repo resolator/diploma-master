@@ -34,14 +34,15 @@ class BaselineNet(nn.Module):
         self.rnn = nn.LSTM(input_size=backbone_out,
                            hidden_size=dec_hs,
                            num_layers=n_layers,
-                           bidirectional=True)
+                           bidirectional=True,
+                           dropout=dec_dropout)
         self.dropout = nn.Dropout(dec_dropout)
         self.conv = nn.Conv2d(dec_hs * 2, alpb_size, (1, 1))
 
         self.loss_fn = nn.CTCLoss(zero_infinity=True)
         self.ctc_decoder = CTCBeamDecoder(self.i2c,
-                                          beam_width=20,
-                                          num_processes=4,
+                                          beam_width=10,
+                                          num_processes=10,
                                           log_probs_input=True)
 
     def forward(self, x):
