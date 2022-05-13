@@ -77,6 +77,8 @@ def get_args():
                         help='Backbone out channels number (for custom only).')
     parser.add_argument('--fe-dropout', type=float, default=0.15,
                         help='Dropout for the end of Backbone.')
+    parser.add_argument('--dec-dropout', type=float, default=0.15,
+                        help='Dropout for the Decoder.')
     parser.add_argument('--dec-hs', type=int, default=256,
                         help='Decoder hidden size.')
 
@@ -112,8 +114,6 @@ def get_args():
     seg_attn = subparsers.add_parser('seg-attn-args')
     seg_attn.add_argument('--config-seg-attn', is_config_file=True,
                           help='Path to seg_attn config file.')
-    seg_attn.add_argument('--dec-dropout', type=float, default=0.15,
-                          help='Dropout for the Decoder.')
     seg_attn.add_argument('--teacher-rate', type=float, default=1.0,
                           help='Teacher rate for decoder training input.')
     seg_attn.add_argument('--emb-size', type=int, default=256,

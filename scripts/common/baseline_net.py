@@ -17,8 +17,14 @@ class BaselineNet(nn.Module):
                  backbone_out=256,
                  n_layers=2,
                  dec_hs=256,
-                 fe_dropout=0.15):
+                 fe_dropout=0.15,
+                 dec_dropout=0.15):
         super().__init__()
+
+        print('========== BaselineNet args ==========')
+        print('n_layers: {}; dec_hs: {}; fe_dropout: {};'.format(
+            n_layers, dec_hs, fe_dropout
+        ))
 
         self.c2i = c2i
         self.i2c = i2c
@@ -29,7 +35,7 @@ class BaselineNet(nn.Module):
                            hidden_size=dec_hs,
                            num_layers=n_layers,
                            bidirectional=True)
-        self.dropout = nn.Dropout(0.15)
+        self.dropout = nn.Dropout(dec_dropout)
         self.conv = nn.Conv2d(dec_hs * 2, alpb_size, (1, 1))
 
         self.loss_fn = nn.CTCLoss(zero_infinity=True)

@@ -36,7 +36,8 @@ def create_model(c2i, i2c, args):
         'dec_hs': getattr(args, 'dec_hs',
                           512 if args.model_type == 'seg_attn' else 256),
         'backbone_out': getattr(args, 'backbone_out', 256),
-        'fe_dropout': getattr(args, 'fe_dropout', 0.15)
+        'fe_dropout': getattr(args, 'fe_dropout', 0.15),
+        'dec_dropout': getattr(args, 'dec_dropout', 0.2)
     }
     if args.model_type == 'baseline':
         model = BaselineNet(
@@ -67,7 +68,6 @@ def create_model(c2i, i2c, args):
         model = SegAttnModel(
             text_max_len=args.text_max_len,
             backbone=getattr(args, 'backbone', 'custom'),
-            dec_dropout=args.dec_dropout,
             teacher_rate=args.teacher_rate,
             emb_size=args.emb_size,
             pos_enc=getattr(args, 'pos_encoding', False),

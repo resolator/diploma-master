@@ -19,7 +19,7 @@ class Seq2seqModel(nn.Module):
                  attn_sz=256,
                  emb_size=128,
                  enc_n_layers=1,
-                 dropout_p=0.1,
+                 dec_dropout=0.1,
                  pe=False,
                  teacher_rate=0.9,
                  fe_dropout=0.15):
@@ -41,7 +41,7 @@ class Seq2seqModel(nn.Module):
                                dec_hs=dec_hs,
                                attn_sz=attn_sz,
                                alphabet_size=alpb_size,
-                               dropout_p=dropout_p,
+                               dropout_p=dec_dropout,
                                teacher_rate=teacher_rate)
         self.loss_f = nn.NLLLoss(reduction='none', ignore_index=sos_idx)
 
@@ -127,7 +127,7 @@ class Decoder(nn.Module):
         context, attn_probs = self.attention(dec_h, weighted_enc_out, enc_out)
         rnn_x = torch.cat([x, context], dim=1)
         h, c = self.lstm(rnn_x, hc)
-        logits = self.linear(h)
+        logits = self.linear(self.dropout(h))
 
         return logits, (h, c), attn_probs
 
