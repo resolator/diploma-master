@@ -113,7 +113,7 @@ def main():
             copyfile(paths[0], img_path)
 
             img_path_aug = args.save_errors_to.joinpath(
-                img_name.stem + '_aug.' + img_name.suffix
+                img_path.stem + '_aug.' + img_path.suffix
             )
             img = (img.squeeze() * 255).cpu().numpy().astype(np.uint8)
             cv2.imwrite(str(img_path_aug), img)
