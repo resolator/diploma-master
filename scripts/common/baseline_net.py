@@ -22,8 +22,9 @@ class BaselineNet(nn.Module):
         super().__init__()
 
         print('========== BaselineNet args ==========')
-        print('n_layers: {}; dec_hs: {}; fe_dropout: {};'.format(
-            n_layers, dec_hs, fe_dropout
+        print('n_layers: {}; dec_hs: {}; fe_dropout: {}; '
+              'dec_dropout: {};'.format(
+                  n_layers, dec_hs, fe_dropout, dec_dropout
         ))
 
         self.c2i = c2i
