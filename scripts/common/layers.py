@@ -4,7 +4,7 @@ from torch import nn
 
 
 class PositionalEncoder(nn.Module):
-    def __init__(self, d_model, max_len=512):
+    def __init__(self, d_model, max_len=1024):
         """Positional encoding layer.
 
         Parameters
