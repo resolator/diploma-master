@@ -109,6 +109,10 @@ def get_args():
                          help='Teacher rate for decoder training input.')
     seq2seq.add_argument('--enc-layers', type=int, default=1,
                          help='Encoder RNN layers.')
+    seq2seq.add_argument('--backbone', default='conv_net6',
+                         choices=['conv_net5', 'conv_net6', 'resnet18',
+                                  'resnet34', 'efficientnet_b0'],
+                         help='Backbone type.')
 
     # add seg_attn args
     seg_attn = subparsers.add_parser('seg-attn-args')

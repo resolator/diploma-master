@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*
-"""Training launcher."""
+"""Training epoch for different models.."""
 import sys
 import torch
 
@@ -11,6 +11,17 @@ from pathlib import Path
 
 sys.path.append(str(Path(sys.path[0]).parent))
 from common.utils import calc_cer
+
+
+def vis_attn(atts, img, writer, img_count, epoch, stage):
+    att = atts[0].detach().sum(dim=1).repeat_interleave(2, -2)
+    att_img = att.unsqueeze(0).cpu().numpy()
+    att_img -= att_img.min()
+    att_img = (att_img / att_img.max() * 255).astype(np.uint8)
+    cur_img = (img[0].cpu().numpy() * 255).astype(np.uint8)
+
+    writer.add_image(stage + '-img-' + str(img_count), cur_img, epoch)
+    writer.add_image(stage + '-att-' + str(img_count), att_img, epoch)
 
 
 def get_epoch_step_fn(model_type='baseline'):
@@ -64,15 +75,7 @@ def epoch_step_seg_attn(model, loaders, device, optim, writer, epoch):
 
             # dump attention
             if i % 50 == 0:
-                att = atts[0].detach().sum(dim=1).repeat_interleave(2, -2)
-                att_img = att.unsqueeze(0).cpu().numpy()
-                att_img -= att_img.min()
-                att_img = (att_img / att_img.max() * 255).astype(np.uint8)
-                cur_img = (img[0].cpu().numpy() * 255).astype(np.uint8)
-
-                writer.add_image(stage + '-img-' + str(img_count), cur_img, epoch)
-                writer.add_image(stage + '-att-' + str(img_count), att_img, epoch)
-
+                vis_attn(atts, img, writer, img_count, epoch, stage)
                 img_count += 1
 
             # print
@@ -176,16 +179,7 @@ def epoch_step_seq2seq(model, loaders, device, optim, writer, epoch):
 
             # dump attention
             if i % 50 == 0:
-                att = atts[0]
-                att = att.repeat_interleave(2, -2)
-                att_img = att.detach().unsqueeze(0).cpu().numpy()
-                att_img -= att_img.min()
-                att_img = (att_img / att_img.max() * 255).astype(np.uint8)
-                cur_img = (img[0].cpu().numpy() * 255).astype(np.uint8)
-
-                writer.add_image(stage + '-img-' + str(img_count), cur_img, epoch)
-                writer.add_image(stage + '-att-' + str(img_count), att_img, epoch)
-
+                vis_attn(atts, img, writer, img_count, epoch, stage)
                 img_count += 1
 
             # print

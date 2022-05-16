@@ -62,6 +62,7 @@ def create_model(c2i, i2c, args):
             emb_size=args.emb_size,
             pe=getattr(args, 'pos_encoding', False),
             teacher_rate=args.teacher_rate,
+            backbone=getattr(args, 'backbone', 'conv_net6'),
             **common_args
         )
     elif args.model_type == 'seg_attn':

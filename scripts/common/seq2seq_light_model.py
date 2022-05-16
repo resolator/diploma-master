@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*
-"""Seq2Seq model with Bahdanau attention and no Encoder."""
+"""Seq2Seq model with 2D attention and no Encoder."""
 import torch
 import numpy as np
 from torch import nn
 from torch.nn import functional as F
-from .conv_net import ConvNet6
+from .conv_net import get_backbone
 from .layers import PositionalEncoder
 
 
@@ -14,6 +14,7 @@ class Seq2seqLightModel(nn.Module):
                  c2i,
                  i2c,
                  text_max_len,
+                 backbone='conv_net6',
                  backbone_out=512,
                  dec_hs=256,
                  attn_sz=256,
@@ -28,7 +29,10 @@ class Seq2seqLightModel(nn.Module):
         sos_idx = self.c2i['ś']
         alpb_size = len(self.i2c)
 
-        self.fe = ConvNet6(out_channels=backbone_out, dropout=fe_dropout)
+        self.fe = get_backbone(backbone,
+                               out_channels=backbone_out,
+                               dropout=fe_dropout)
+
         self.pe = PositionalEncoder(backbone_out) if pe else None
         self.decoder = Decoder(text_max_len=text_max_len,
                                sos_idx=sos_idx,
@@ -109,7 +113,7 @@ class Decoder(nn.Module):
         return logits, (h, c), attn_probs
 
     def forward(self, enc_out, target_seq=None):
-        weighted_enc_out = self.attention.encoder_conv(enc_out)
+        weighted_enc_out = self.attention.encoder_conv(enc_out)  # BS, A, H, W
 
         bs = enc_out.shape[0]
         h, c = self.init_hidden(bs, enc_out.device)
@@ -143,7 +147,7 @@ class Decoder(nn.Module):
 
         return (torch.stack(logs_probs).permute(1, 0, 2),
                 torch.stack(preds).permute(1, 0),
-                torch.stack(attentions).squeeze(2).permute(1, 0, 2))
+                torch.stack(attentions).permute(1, 0, 2, 3))
 
     def init_hidden(self, bs, device):
         return torch.zeros(2, bs, self.dec_hs,
@@ -154,16 +158,16 @@ class BahdanauAttention(nn.Module):
     def __init__(self, enc_hs=256, dec_hs=384, attn_size=512):
         super().__init__()
 
-        self.encoder_conv = nn.Conv1d(enc_hs, attn_size, 1)
+        self.encoder_conv = nn.Conv2d(enc_hs, attn_size, (3, 3), (1, 1), (1, 1))
         self.decoder_linear = nn.Linear(dec_hs, attn_size)
-        self.energy_layer = nn.Conv1d(attn_size, 1, 1)
+        self.energy_layer = nn.Conv2d(attn_size, 1, (3, 3), (1, 1), (1, 1))
 
     def forward(self, dec_h, weighted_enc_out, enc_out):
-        weighted_dec_hs = self.decoder_linear(dec_h).unsqueeze(2)
+        weighted_dec_hs = self.decoder_linear(dec_h).unsqueeze(2).unsqueeze(3)
         pre_scores = torch.tanh(weighted_enc_out + weighted_dec_hs)
 
         scores = self.energy_layer(pre_scores)
-        alphas = F.softmax(scores, dim=-1)
-        context = torch.bmm(enc_out, alphas.permute(0, 2, 1))
+        alphas = F.softmax(scores.flatten(1), dim=1).reshape(scores.shape)
+        context = (enc_out * alphas).sum(dim=[2, 3])
 
-        return context.squeeze(2), alphas.squeeze(1)  # BS, enc_hs; BS, W
+        return context, alphas.squeeze(1)  # BS, enc_hs; BS, H, W
