@@ -3,9 +3,9 @@ from torch import nn
 
 def get_backbone(name='conv_net6', out_channels=256, dropout=0.15):
     if name == 'conv_net5':
-        return ConvNet5(out_channels=256, dropout=0.15)
+        return ConvNet5(out_channels=out_channels, dropout=dropout)
     else:
-        return ConvNet6(out_channels=256, dropout=0.15)
+        return ConvNet6(out_channels=out_channels, dropout=dropout)
 
 
 class ConvNet6(nn.Module):
@@ -86,7 +86,7 @@ class ConvNet5(nn.Module):
     def __init__(self, out_channels=256, dropout=0.15):
         super().__init__()
 
-        print('========== ConvNet6 args ==========')
+        print('========== ConvNet5 args ==========')
         print('out_channels: {}; dropout: {};'.format(
             out_channels, dropout
         ))
@@ -112,7 +112,7 @@ class ConvNet5(nn.Module):
             nn.ReLU(),
             nn.MaxPool2d((2, 1)),
 
-            nn.Conv2d(256, out_channels, (1, 1)),
+            nn.Conv2d(256, out_channels, (3, 3), (1, 1), (1, 1)),
             nn.BatchNorm2d(out_channels),
             nn.ReLU(),
 
