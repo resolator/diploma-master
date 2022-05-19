@@ -58,7 +58,7 @@ class Seq2seqLightModel(nn.Module):
         return torch.mean(loss[mask])
 
     def forward(self, x, target_seq=None):
-        y = self.fe(x).squeeze(2)  # (BS, 256, W)
+        y = self.fe(x)  # (BS, 256, H, W)
 
         if self.pe is not None:
             y = self.pe(y)
