@@ -80,10 +80,10 @@ class Decoder(nn.Module):
         super().__init__()
         print('========== Decoder args ==========')
         print('text_max_len: {}; sos_idx: {}; emb_sz: {}; enc_hs: {}; '
-              'dec_hs: {}; alphabet_size: {}; dropout_p: {}; '
+              'dec_hs: {}; alphabet_size: {}; dropout_p: {}; attn_sz: {}; '
               'teacher_rate: {};'.format(
             text_max_len, sos_idx, emb_sz, enc_hs, dec_hs, alphabet_size,
-            dropout_p, teacher_rate
+            dropout_p, attn_sz, teacher_rate
         ))
 
         self.sos_idx = sos_idx
