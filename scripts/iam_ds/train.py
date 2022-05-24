@@ -81,6 +81,10 @@ def get_args():
                         help='Dropout for the Decoder.')
     parser.add_argument('--dec-hs', type=int, default=256,
                         help='Decoder hidden size.')
+    parser.add_argument('--dec-layers', type=int, default=1,
+                        help='Decoder RNN layers.')
+    parser.add_argument('--rnn-dropout', type=float, default=0.0,
+                        help='Dropout inside rnns.')
 
     parser.add_argument('--save-to', type=Path,
                         help='Path to save dir.')

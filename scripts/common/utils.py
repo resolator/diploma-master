@@ -53,6 +53,8 @@ def create_model(c2i, i2c, args):
             enc_n_layers=args.enc_layers,
             pe=getattr(args, 'pos_encoding', False),
             teacher_rate=args.teacher_rate,
+            dec_n_layers=getattr(args, 'dec_layers', 1),
+            rnn_dropout=getattr(args, 'rnn_dropout', 0),
             **common_args
         )
     elif args.model_type == 'seq2seq_light':

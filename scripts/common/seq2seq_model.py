@@ -19,7 +19,9 @@ class Seq2seqModel(nn.Module):
                  attn_sz=256,
                  emb_size=128,
                  enc_n_layers=1,
+                 dec_n_layers=1,
                  dec_dropout=0.1,
+                 rnn_dropout=0.0,
                  pe=False,
                  teacher_rate=0.9,
                  fe_dropout=0.15):
@@ -32,7 +34,8 @@ class Seq2seqModel(nn.Module):
         self.fe = ConvNet6(out_channels=backbone_out, dropout=fe_dropout)
         self.encoder = Encoder(input_sz=backbone_out,
                                hs=enc_hs,
-                               n_layers=enc_n_layers)
+                               n_layers=enc_n_layers,
+                               rnn_dropout=rnn_dropout)
         self.pe = PositionalEncoder(enc_hs * 2) if pe else None
         self.decoder = Decoder(text_max_len=text_max_len,
                                sos_idx=sos_idx,
@@ -42,7 +45,9 @@ class Seq2seqModel(nn.Module):
                                attn_sz=attn_sz,
                                alphabet_size=alpb_size,
                                dropout_p=dec_dropout,
-                               teacher_rate=teacher_rate)
+                               teacher_rate=teacher_rate,
+                               n_layers=dec_n_layers,
+                               rnn_dropout=rnn_dropout)
         self.loss_f = nn.NLLLoss(reduction='none', ignore_index=sos_idx)
 
     def calc_loss(self, logs_probs, targets, targets_lens):
@@ -68,16 +73,17 @@ class Seq2seqModel(nn.Module):
 
 
 class Encoder(nn.Module):
-    def __init__(self, input_sz=256, hs=256, n_layers=2):
+    def __init__(self, input_sz=256, hs=256, n_layers=2, rnn_dropout=0.0):
         super().__init__()
         print('========== Encoder args ==========')
-        print('input_sz: {}; hs: {}; n_layers: {};'.format(
-            input_sz, hs, n_layers
+        print('input_sz: {}; hs: {}; n_layers: {}; rnn_dropout: {};'.format(
+            input_sz, hs, n_layers, rnn_dropout
         ))
         self.lstm = nn.LSTM(input_sz,
                             hs,
                             num_layers=n_layers,
-                            bidirectional=True)
+                            bidirectional=True,
+                            dropout=rnn_dropout)
 
     def forward(self, x):
         # BS, C, W
@@ -97,14 +103,16 @@ class Decoder(nn.Module):
                  attn_sz=256,
                  alphabet_size=81,
                  dropout_p=0.1,
-                 teacher_rate=0.9):
+                 teacher_rate=0.9,
+                 n_layers=1,
+                 rnn_dropout=0.0):
         super().__init__()
         print('========== Decoder args ==========')
         print('text_max_len: {}; sos_idx: {}; emb_sz: {}; enc_hs: {}; '
               'dec_hs: {}; alphabet_size: {}; dropout_p: {}; '
-              'teacher_rate: {};'.format(
+              'teacher_rate: {}; n_layers: {}; rnn_dropout: {};'.format(
             text_max_len, sos_idx, emb_sz, enc_hs, dec_hs, alphabet_size,
-            dropout_p, teacher_rate
+            dropout_p, teacher_rate, n_layers, rnn_dropout
         ))
 
         self.sos_idx = sos_idx
@@ -112,24 +120,25 @@ class Decoder(nn.Module):
         self.max_len = text_max_len
         self.teacher_rate = teacher_rate
         self.dec_hs = dec_hs
+        self.n_layers = n_layers
 
         self.emb = nn.Embedding(alphabet_size, emb_sz)
         self.dropout = nn.Dropout(self.dropout_p)
-
-        self.lstm = nn.LSTMCell(input_size=emb_sz + enc_hs,
-                                hidden_size=self.dec_hs)
+        self.lstm = nn.LSTM(input_size=emb_sz + enc_hs,
+                            hidden_size=self.dec_hs,
+                            num_layers=n_layers,
+                            dropout=rnn_dropout)
         self.attention = BahdanauAttention(enc_hs, self.dec_hs, attn_sz)
         self.linear = nn.Linear(self.dec_hs, alphabet_size)
 
     def forward_step(self, x, enc_out, weighted_enc_out, hc):
-        dec_h = hc[0]  # BS, HS
-
+        dec_h = hc[0][-1]  # BS, HS
         context, attn_probs = self.attention(dec_h, weighted_enc_out, enc_out)
-        rnn_x = torch.cat([x, context], dim=1)
-        h, c = self.lstm(rnn_x, hc)
-        logits = self.linear(self.dropout(h))
+        rnn_x = torch.cat([x, context], dim=1).unsqueeze(0)
+        y, hc = self.lstm(rnn_x, hc)
+        logits = self.linear(self.dropout(y.squeeze(0)))
 
-        return logits, (h, c), attn_probs
+        return logits, hc, attn_probs
 
     def forward(self, enc_out, target_seq=None):
         weighted_enc_out = self.attention.encoder_conv(enc_out)
@@ -169,7 +178,7 @@ class Decoder(nn.Module):
                 torch.stack(attentions).squeeze(2).permute(1, 0, 2))
 
     def init_hidden(self, bs, device):
-        return torch.zeros(2, bs, self.dec_hs,
+        return torch.zeros(2, self.n_layers, bs, self.dec_hs,
                            dtype=torch.float, device=device)
 
 
