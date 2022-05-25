@@ -17,6 +17,7 @@ from epoch_steps import get_epoch_step_fn, get_metrics_dict
 
 sys.path.append(str(Path(sys.path[0]).parent))
 from common.utils import build_alphabet, create_model, print_model_params
+from common.conv_net import get_models_list
 
 
 def get_args():
@@ -114,9 +115,8 @@ def get_args():
     seq2seq.add_argument('--enc-layers', type=int, default=1,
                          help='Encoder RNN layers.')
     seq2seq.add_argument('--backbone', default='conv_net6',
-                         choices=['conv_net5', 'conv_net6', 'resnet18',
-                                  'resnet34', 'efficientnet_b0'],
-                         help='Backbone type.')
+                         choices=get_models_list(),
+                         help='Backbone type. Use carefully.')
 
     # add seg_attn args
     seg_attn = subparsers.add_parser('seg-attn-args')

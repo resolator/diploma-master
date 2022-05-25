@@ -29,15 +29,17 @@ class Seq2seqLightModel(nn.Module):
         sos_idx = self.c2i['ś']
         alpb_size = len(self.i2c)
 
-        self.fe = get_backbone(backbone,
-                               out_channels=backbone_out,
-                               dropout=fe_dropout)
-
-        self.pe = PositionalEncoder(backbone_out) if pe else None
+        self.backbone_out = backbone_out
+        self.fe, self.backbone_out = get_backbone(
+            backbone,
+            out_channels=self.backbone_out,
+            dropout=fe_dropout
+        )
+        self.pe = PositionalEncoder(self.backbone_out) if pe else None
         self.decoder = Decoder(text_max_len=text_max_len,
                                sos_idx=sos_idx,
                                emb_sz=emb_size,
-                               enc_hs=backbone_out,
+                               enc_hs=self.backbone_out,
                                dec_hs=dec_hs,
                                attn_sz=attn_sz,
                                alphabet_size=alpb_size,

@@ -14,10 +14,10 @@ from common.utils import calc_cer
 
 
 def vis_attn(atts, img, writer, img_count, epoch, stage):
-    if len(atts[0].shape) == 4:
-        att = atts[0].detach().sum(dim=1).repeat_interleave(2, -2)
-    else:
+    if len(atts[0].shape) == 2:
         att = atts[0].detach().repeat_interleave(2, -2)
+    else:  # == 3
+        att = atts[0].detach().sum(dim=1).repeat_interleave(2, -2)
 
     att_img = att.unsqueeze(0).cpu().numpy()
     att_img -= att_img.min()

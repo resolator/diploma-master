@@ -1,11 +1,34 @@
+import timm
 from torch import nn
+
+
+def get_models_list():
+    return ['conv_net5', 'conv_net6', 'resnet18']
 
 
 def get_backbone(name='conv_net6', out_channels=256, dropout=0.15):
     if name == 'conv_net5':
-        return ConvNet5(out_channels=out_channels, dropout=dropout)
+        return ConvNet5(out_channels, dropout), out_channels
+    elif name == 'conv_net6':
+        return ConvNet6(out_channels, dropout), out_channels
+    elif name == 'resnet18':
+        print('WARNING: backbone out channels is forced to 256 for resnet.')
+        fe = timm.create_model(name,
+                               pretrained=True,
+                               in_chans=1,
+                               num_classes=0,
+                               global_pool='')
+        fe.conv1 = nn.Identity()
+        fe.bn1 = nn.Identity()
+        fe.act1 = nn.Identity()
+        fe.maxpool = nn.Identity()
+        fe.layer1[0].conv1 = nn.Conv2d(1, 64, (3, 3), (1, 1), (1, 1),
+                                       bias=False)
+        fe.layer4 = nn.Identity()
+
+        return fe, 256
     else:
-        return ConvNet6(out_channels=out_channels, dropout=dropout)
+        raise AssertionError('backbone must be in:', get_models_list())
 
 
 class ConvNet6(nn.Module):
