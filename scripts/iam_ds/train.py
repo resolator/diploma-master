@@ -117,6 +117,9 @@ def get_args():
     seq2seq.add_argument('--backbone', default='conv_net6',
                          choices=get_models_list(),
                          help='Backbone type. Use carefully.')
+    seq2seq.add_argument('--expand-h', action='store_true',
+                         help='Expand height to 4 in ConvNet6 out by removing '
+                              'last maxpools.')
 
     # add seg_attn args
     seg_attn = subparsers.add_parser('seg-attn-args')

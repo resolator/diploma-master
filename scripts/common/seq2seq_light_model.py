@@ -22,7 +22,8 @@ class Seq2seqLightModel(nn.Module):
                  dec_dropout=0.1,
                  pe=False,
                  teacher_rate=0.9,
-                 fe_dropout=0.15):
+                 fe_dropout=0.15,
+                 expand_h=False):
         super().__init__()
         self.i2c = i2c
         self.c2i = c2i
@@ -33,7 +34,8 @@ class Seq2seqLightModel(nn.Module):
         self.fe, self.backbone_out = get_backbone(
             backbone,
             out_channels=self.backbone_out,
-            dropout=fe_dropout
+            dropout=fe_dropout,
+            expand_h=expand_h
         )
         self.pe = PositionalEncoder(self.backbone_out) if pe else None
         self.decoder = Decoder(text_max_len=text_max_len,

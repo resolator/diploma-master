@@ -7,11 +7,14 @@ def get_models_list():
     return ['conv_net5', 'conv_net6', 'resnet18']
 
 
-def get_backbone(name='conv_net6', out_channels=256, dropout=0.15):
+def get_backbone(name='conv_net6',
+                 out_channels=256,
+                 dropout=0.15,
+                 expand_h=False):
     if name == 'conv_net5':
         return ConvNet5(out_channels, dropout), out_channels
     elif name == 'conv_net6':
-        return ConvNet6(out_channels, dropout), out_channels
+        return ConvNet6(out_channels, dropout, expand_h), out_channels
     elif name == 'resnet18':
         print('WARNING: backbone out channels is forced to 256 for resnet.')
         fe = timm.create_model(name,
@@ -33,12 +36,12 @@ def get_backbone(name='conv_net6', out_channels=256, dropout=0.15):
 
 
 class ConvNet6(nn.Module):
-    def __init__(self, out_channels=256, dropout=0.15):
+    def __init__(self, out_channels=256, dropout=0.15, expand_h=False):
         super().__init__()
 
         print('========== ConvNet6 args ==========')
-        print('out_channels: {}; dropout: {};'.format(
-            out_channels, dropout
+        print('out_channels: {}; dropout: {}; expand_h: {};'.format(
+            out_channels, dropout, expand_h
         ))
 
         self.fe = nn.Sequential(
@@ -65,12 +68,12 @@ class ConvNet6(nn.Module):
             nn.Conv2d(128, 256, (3, 3), (1, 1), (1, 1)),
             FlexibleLayerNorm([-2, -1]),
             nn.ReLU(),
-            nn.MaxPool2d((2, 1)),
+            nn.Identity() if expand_h else nn.MaxPool2d((2, 1)),
 
             nn.Conv2d(256, out_channels, (1, 1)),
             FlexibleLayerNorm([-2, -1]),
             nn.ReLU(),
-            nn.MaxPool2d((2, 1)),
+            nn.Identity() if expand_h else nn.MaxPool2d((2, 1)),
 
             nn.Dropout(dropout)
         )
@@ -86,7 +89,8 @@ class ConvNet6(nn.Module):
         Returns
         -------
         torch.tensor
-            Features map of shape (BS, out_channels, 1, W // 4).
+            Features map of shape (BS, out_channels, 1, W // 4) for
+            expand_h=False and (BS, out_channels, H // 16, W // 4) otherwise.
 
         """
         return self.fe(x)
