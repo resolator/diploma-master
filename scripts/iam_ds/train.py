@@ -267,7 +267,7 @@ def main():
             model.fe.freeze()
 
     # print the number of model's parameters
-    print_model_params(model)
+    print_model_params(model.parameters())
 
     cur_training_epochs = 0  # number of completed epochs for the current launch
     while ep != args.epochs + 1:

@@ -100,11 +100,12 @@ def calc_params(params, check_requires_grad=False):
         return sum(p.numel() for p in params)
 
 
-def print_model_params(model):
+def print_model_params(params, trainable=True):
     print('=' * 32)
     print('All parameters:       ', end='')
-    print('{:,}'.format(calc_params(model.parameters())))
+    print('{:,}'.format(calc_params(params)))
 
-    print('Trainable parameters: ', end='')
-    print('{:,}'.format(calc_params(model.parameters(), True)))
-    print('=' * 32)
+    if trainable:
+        print('Trainable parameters: ', end='')
+        print('{:,}'.format(calc_params(params, True)))
+        print('=' * 32)
