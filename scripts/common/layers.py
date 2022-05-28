@@ -12,7 +12,7 @@ class PositionalEncoder(nn.Module):
         d_model : int
             Number of channels for the output from layer before this.
         max_len : int, optional
-            Maximal length of the layer before, by default 512.
+            Maximal length of the layer before, by default 600.
 
         """
         super().__init__()
@@ -36,6 +36,46 @@ class PositionalEncoder(nn.Module):
             raise AssertionError(
                 'input shape must be 3 (for sequences) or 4 (for images).'
             )
+
+
+class PositionalEncoder2D(nn.Module):
+    def __init__(self, d_model, max_height=8, max_len=600):
+        """Positional encoding 2D layer.
+
+        Parameters
+        ----------
+        d_model : int
+            Number of channels for the output from layer before this.
+        max_height : int, optional
+            Maximal height of the layer before, by default 4.
+        max_len : int, optional
+            Maximal length of the layer before, by default 600.
+
+        """
+        super().__init__()
+
+        pos_w = torch.arange(0, max_len).unsqueeze(1)
+        pos_h = torch.arange(0, max_height).unsqueeze(1)
+        pe = torch.zeros(1, d_model, max_height, max_len)
+
+        d_model = int(d_model // 2)
+        a = torch.arange(0, d_model, 2) * (-np.log(10000.0) / d_model)
+        div_term = torch.exp(a)
+
+        x1 = torch.sin(pos_w * div_term).T.unsqueeze(1).repeat(1, max_height, 1)
+        x2 = torch.cos(pos_w * div_term).T.unsqueeze(1).repeat(1, max_height, 1)
+        x3 = torch.sin(pos_h * div_term).T.unsqueeze(2).repeat(1, 1, max_len)
+        x4 = torch.cos(pos_h * div_term).T.unsqueeze(2).repeat(1, 1, max_len)
+
+        pe[0, 0:d_model:2, :, :] = x1
+        pe[0, 1:d_model:2, :, :] = x2
+        pe[0, d_model::2, :, :] = x3
+        pe[0, d_model + 1::2, :, :] = x4
+
+        self.register_buffer('pe', pe)
+
+    def forward(self, x):
+        return x + self.pe[:, :, :x.size(-2), :x.size(-1)]  # BS, C, H, W
 
 
 class FlexibleLayerNorm(nn.Module):

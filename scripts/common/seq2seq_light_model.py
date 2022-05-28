@@ -6,7 +6,7 @@ import numpy as np
 from torch import nn
 from torch.nn import functional as F
 from .conv_net import get_backbone
-from .layers import PositionalEncoder
+from .layers import PositionalEncoder, PositionalEncoder2D
 
 
 class Seq2seqLightModel(nn.Module):
@@ -37,7 +37,8 @@ class Seq2seqLightModel(nn.Module):
             dropout=fe_dropout,
             expand_h=expand_h
         )
-        self.pe = PositionalEncoder(self.backbone_out) if pe else None
+        pe_class = PositionalEncoder2D if expand_h else PositionalEncoder
+        self.pe = pe_class(self.backbone_out) if pe else None
         self.decoder = Decoder(text_max_len=text_max_len,
                                sos_idx=sos_idx,
                                emb_sz=emb_size,
