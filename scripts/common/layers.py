@@ -17,6 +17,11 @@ class PositionalEncoder(nn.Module):
         """
         super().__init__()
 
+        print('========== PositionalEncoder args ==========')
+        print('d_model: {}; max_len: {};'.format(
+            d_model, max_len
+        ))
+
         position = torch.arange(max_len)
         a = torch.arange(0, d_model, 2) * (-np.log(10000.0) / d_model)
         div_term = torch.exp(a).unsqueeze(1)
@@ -53,6 +58,11 @@ class PositionalEncoder2D(nn.Module):
 
         """
         super().__init__()
+
+        print('========== PositionalEncoder2D args ==========')
+        print('d_model: {}; max_height: {}; max_len: {};'.format(
+            d_model, max_height, max_len
+        ))
 
         pos_w = torch.arange(0, max_len).unsqueeze(1)
         pos_h = torch.arange(0, max_height).unsqueeze(1)
