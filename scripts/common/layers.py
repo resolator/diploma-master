@@ -98,9 +98,9 @@ class FlexibleLayerNorm(nn.Module):
         Parameters
         ----------
         dim : int, list
-            Number of dimensions to perform the norm, by default -1
+            Number of dimensions to perform the norm.
         eps : float
-            Epsilon, by default 1e-5
+            Epsilon, by default 1e-5.
 
         """
         super().__init__()
@@ -113,3 +113,33 @@ class FlexibleLayerNorm(nn.Module):
         std = x.std(self.dim, keepdim=True)
 
         return (x - mean) / (std + self.eps)
+
+
+class Gate(nn.Module):
+    def __init__(self, dim, eps=1e-5):
+        """Gate layer.
+
+        Number of input channels must be even.
+
+        Parameters
+        ----------
+        dim : int, list
+            Number of dimensions to perform the FlexibleLayerNorm.
+        eps : float
+            Epsilon for FlexibleLayerNorm, by default 1e-5.
+
+        """
+        super().__init__()
+
+        self.x1_norm = FlexibleLayerNorm(dim=dim, eps=eps)
+        self.x2_norm = FlexibleLayerNorm(dim=dim, eps=eps)
+
+    def forward(self, x):
+        channels = x.size(1)
+        assert channels % 2 == 0, 'channels number must be even'
+
+        x1, x2 = x[:, :channels // 2], x[:, channels // 2:]
+        x1 = self.x1_norm(torch.tanh(x1))
+        x2 = self.x2_norm(torch.sigmoid(x2))
+
+        return x1 * x2
