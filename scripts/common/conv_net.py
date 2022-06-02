@@ -58,7 +58,7 @@ class ConvNet6(nn.Module):
             nn.Conv2d(64, 128, (3, 3), (1, 1), (1, 1)),
             FlexibleLayerNorm([-2, -1]),
             nn.ReLU(),
-            nn.MaxPool2d((2, 1)),
+            nn.MaxPool2d((2, 2)),
 
             nn.Conv2d(128, 128, (3, 3), (1, 1), (1, 1)),
             FlexibleLayerNorm([-2, -1]),
