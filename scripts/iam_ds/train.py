@@ -76,6 +76,8 @@ def get_args():
                         help='Load images to ram. Don\'t use with --augment.')
 
     # common models args
+    parser.add_argument('--gated', action='store_true',
+                        help='Use (DSC+G+D)x2 as end of a backbone ConvNet6.')
     parser.add_argument('--backbone-out', type=int, default=256,
                         help='Backbone out channels number (for custom only).')
     parser.add_argument('--fe-dropout', type=float, default=0.15,
