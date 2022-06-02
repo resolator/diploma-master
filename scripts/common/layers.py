@@ -143,3 +143,34 @@ class Gate(nn.Module):
         x2 = self.x2_norm(torch.sigmoid(x2))
 
         return x1 * x2
+
+
+class DepthwiseSepConv2D(nn.Module):
+    def __init__(self, in_c, out_c, ks, s=1, p=0, k=1, bias=True):
+        """Depthwise separable convolution 2D.
+
+        Parameters
+        ----------
+        in_c : int
+            Number of input channels.
+        out_c : int
+            Number of output channels.
+        ks : int, tuple
+            Kernel size as in usual Conv2d.
+        s : int, optional
+            Stride as in usual Conv2d, by default 1
+        p : int, optional
+            Padding as in usual Conv2d, by default 0
+        k : int, optional
+            Number of output channels in depthwise convolution, by default 1
+        bias : bool, optional
+            Bias, by default True
+
+        """
+        super().__init__()
+        self.dep_conv = nn.Conv2d(in_c, in_c, ks, s, p, groups=in_c * k,
+                                  bias=bias)
+        self.point_conv = nn.Conv2d(in_c, out_c, (1, 1), bias=bias)
+
+    def forward(self, x):
+        return(self.point_conv(self.dep_conv(x)))
