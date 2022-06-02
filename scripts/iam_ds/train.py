@@ -72,6 +72,8 @@ def get_args():
     parser.add_argument('--img-max-width', type=int, default=1408,
                         help='Max width of images. '
                              'Needed for stable validation process.')
+    parser.add_argument('--load-to-ram', action='store_true',
+                        help='Load images to ram. Don\'t use with --augment.')
 
     # common models args
     parser.add_argument('--backbone-out', type=int, default=256,
@@ -230,7 +232,8 @@ def main():
                'height': args.height,
                'i2c': i2c,
                'max_len': args.text_max_len,
-               'correction': args.correction}
+               'correction': args.correction,
+               'load_to_ram': args.load_to_ram}
     ds_train = IAMDataset(split_filepath=args.train_split,
                           augment=args.augment,
                           **ds_args)
