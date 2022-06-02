@@ -167,12 +167,7 @@ class BahdanauAttention(nn.Module):
 
         self.encoder_conv = nn.Conv2d(enc_hs, attn_size, (3, 3), (1, 1), (1, 1))
         self.decoder_linear = nn.Linear(dec_hs, attn_size)
-        self.energy_layer = nn.Sequential(
-            nn.Conv2d(attn_size, attn_size // 2, (3, 3), (1, 1), (1, 1)),
-            FlexibleLayerNorm([-2, -1]),
-            nn.ReLU(),
-            nn.Conv2d(attn_size // 2, 1, (1, 1))
-        )
+        self.energy_layer = nn.Conv2d(attn_size, 1, (3, 3), (1, 1), (1, 1))
 
     def forward(self, dec_h, weighted_enc_out, enc_out):
         weighted_dec_hs = self.decoder_linear(dec_h).unsqueeze(2).unsqueeze(3)
