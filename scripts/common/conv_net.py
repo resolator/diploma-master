@@ -109,6 +109,9 @@ class ConvNet6(BaseNet):
                 nn.Dropout(0.4),
                 DepthwiseSepConv2D(out_channels, out_channels * 2, (1, 9)),
                 Gate(dim=[-2, -1]),
+                nn.Dropout(0.4),
+                DepthwiseSepConv2D(out_channels, out_channels * 2, (1, 9)),
+                Gate(dim=[-2, -1]),
                 nn.Dropout(0.4)
             )
 
