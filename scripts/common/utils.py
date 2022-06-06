@@ -37,13 +37,13 @@ def create_model(c2i, i2c, args):
                           512 if args.model_type == 'seg_attn' else 256),
         'backbone_out': getattr(args, 'backbone_out', 256),
         'fe_dropout': getattr(args, 'fe_dropout', 0.15),
-        'dec_dropout': getattr(args, 'dec_dropout', 0.2)
+        'dec_dropout': getattr(args, 'dec_dropout', 0.2),
+        'dec_n_layers': getattr(args, 'dec_layers', 1),
+        'rnn_dropout': getattr(args, 'rnn_dropout', 0),
+        'rnn_type': getattr(args, 'rnn_type', 'lstm')
     }
     if args.model_type == 'baseline':
-        model = BaselineNet(
-            n_layers=args.n_layers,
-            **common_args
-        )
+        model = BaselineNet(**common_args)
     elif args.model_type == 'seq2seq':
         model = Seq2seqModel(
             text_max_len=args.text_max_len,
@@ -53,8 +53,6 @@ def create_model(c2i, i2c, args):
             enc_n_layers=args.enc_layers,
             pe=getattr(args, 'pos_encoding', False),
             teacher_rate=args.teacher_rate,
-            dec_n_layers=getattr(args, 'dec_layers', 1),
-            rnn_dropout=getattr(args, 'rnn_dropout', 0),
             **common_args
         )
     elif args.model_type == 'seq2seq_light':

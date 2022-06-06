@@ -88,6 +88,9 @@ def get_args():
                         help='Decoder RNN layers.')
     parser.add_argument('--rnn-dropout', type=float, default=0.0,
                         help='Dropout inside rnns.')
+    parser.add_argument('--rnn-type', default='lstm',
+                        choices=['lstm', 'gru'],
+                        help='RNN type.')
 
     parser.add_argument('--save-to', type=Path,
                         help='Path to save dir.')

@@ -15,16 +15,19 @@ class BaselineNet(nn.Module):
                  c2i,
                  i2c,
                  backbone_out=256,
-                 n_layers=2,
+                 dec_n_layers=2,
                  dec_hs=256,
                  fe_dropout=0.15,
-                 dec_dropout=0.15):
+                 dec_dropout=0.15,
+                 rnn_dropout=0.0,
+                 rnn_type='lstm'):
         super().__init__()
 
         print('========== BaselineNet args ==========')
-        print('n_layers: {}; dec_hs: {}; fe_dropout: {}; '
-              'dec_dropout: {};'.format(
-                  n_layers, dec_hs, fe_dropout, dec_dropout
+        print('dec_n_layers: {}; dec_hs: {}; fe_dropout: {}; dec_dropout: {}: '
+              'rnn_dropout: {}; rnn_type: {};'.format(
+                  dec_n_layers, dec_hs, fe_dropout, dec_dropout, rnn_dropout,
+                  rnn_type
         ))
 
         self.c2i = c2i
@@ -32,12 +35,13 @@ class BaselineNet(nn.Module):
         alpb_size = len(self.i2c)
 
         self.fe = ConvNet6(out_channels=backbone_out, dropout=fe_dropout)
-        self.rnn = nn.LSTM(input_size=backbone_out,
-                           hidden_size=dec_hs,
-                           num_layers=n_layers,
-                           bidirectional=True,
-                           dropout=dec_dropout)
-        self.dropout = nn.Dropout(dec_dropout)
+        rnn_f = nn.LSTM if rnn_type == 'lstm' else nn.GRU
+        self.rnn = rnn_f(input_size=backbone_out,
+                         hidden_size=dec_hs,
+                         num_layers=dec_n_layers,
+                         bidirectional=True,
+                         dropout=rnn_dropout)
+        self.dropout = nn.Dropout(rnn_dropout)
         self.conv = nn.Conv2d(dec_hs * 2, alpb_size, (1, 1))
 
         self.loss_fn = nn.CTCLoss(zero_infinity=True)
