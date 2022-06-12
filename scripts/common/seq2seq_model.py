@@ -52,15 +52,15 @@ class Seq2seqModel(nn.Module):
 
     def calc_loss(self, logs_probs, targets, targets_lens):
         logs_probs = logs_probs.permute(0, 2, 1)  # BS, AS, W
-        loss = self.loss_f(logs_probs, targets)
+        losses = self.loss_f(logs_probs, targets)
 
         # lets mask the loss
-        mask = torch.zeros(loss.shape, dtype=torch.int64)
+        bs = losses.size(0)
+        loss = 0.0
+        for i in range(bs):
+            loss += torch.mean(losses[i, :targets_lens[i]])
 
-        for i, t_len in enumerate(targets_lens):
-            mask[i, :t_len] = 1
-
-        return torch.mean(loss[mask])
+        return loss / bs
 
     def forward(self, x, target_seq=None):
         y = self.fe(x).squeeze(2)
