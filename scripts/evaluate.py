@@ -31,8 +31,11 @@ def get_args():
     parser.add_argument('--bs', type=int, default=64,
                         help='Batch size.')
     parser.add_argument('--save-errors-to', type=Path,
-                        help='Save errors to this file.'
+                        help='Save errors to this dir.'
                              'In this case bs will be 1.')
+    parser.add_argument('--save-atts', action='store_true',
+                        help='Draw attention on the image if possible and save '
+                             'it to attn dir at model\'s dir level.')
 
     args = parser.parse_args()
 
@@ -42,6 +45,43 @@ def get_args():
         args.save_errors_to.mkdir(exist_ok=True, parents=True)
 
     return args
+
+
+def draw_attention(img, atts, pd_text, save_to):
+    if len(atts.shape) == 2:
+        atts.unsqueeze(-2)  # added H dim
+
+    # addet C dim (AS, H, W, C)
+    img = img.detach().cpu().squeeze(0).unsqueeze(-1).numpy()
+    atts = atts.unsqueeze(-1).detach().cpu().numpy().astype(np.float32)
+    for i in range(atts.shape[0]):
+        atts[i] = atts[i] / atts[i].max()
+
+
+    # cutting tralling <eos>
+    pd_text = pd_text[0]
+    idx = len(pd_text)
+    for i in range(len(pd_text) - 1, 0, -1):
+        if pd_text[i] != 'é':
+            break
+        idx = i + 1
+
+    pd_text = pd_text[:idx]
+    atts = atts[:idx]
+
+    # draw and save each char
+    color_img = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)
+    for idx, (att, char) in enumerate(zip(atts, pd_text)):
+        resized_att = cv2.resize(att, (img.shape[1], img.shape[0]),
+                                 interpolation=cv2.INTER_NEAREST)
+        attended_img = color_img.copy()
+        attended_img[:, :, 0] -= resized_att / 2
+        attended_img[:, :, 1] -= resized_att / 2
+        attended_img[:, :, 2] += resized_att / 2
+        attended_img = (np.clip(attended_img, 0, 1) * 255).astype(np.uint8)
+
+        img_name = str(idx) + '_attended_' + char + '.png'
+        cv2.imwrite(str(save_to.joinpath(img_name)), attended_img)
 
 
 def main():
@@ -69,8 +109,7 @@ def main():
                     max_len=text_max_len,
                     augment=False,
                     return_path=True)
-    dl = DataLoader(ds, args.bs, num_workers=4, collate_fn=ds.collate_fn,
-                    drop_last=True)
+    dl = DataLoader(ds, args.bs, num_workers=4, collate_fn=ds.collate_fn)
 
     print('Model creation')
     model = create_model(c2i, i2c, ckpt['args']).to(device)
@@ -82,7 +121,7 @@ def main():
     pprint(ckpt['metrics'])
 
     # evaluation
-    final_cer = 0.0
+    final_cer, final_loss = 0.0, 0.0
     loader_size = len(dl)
     errors = {}
     for idx, (img, text, lens, paths) in enumerate(tqdm(dl, desc='Evaluating')):
@@ -92,8 +131,9 @@ def main():
             _, log_probs = model(img)
             pd_text, _ = model.decode(log_probs)
             pd_text = ds.tensor2text(pd_text)
+            atts = None
         else:
-            log_probs, preds, _ = model(img)
+            log_probs, preds, atts = model(img)
             pd_text = ds.tensor2text(preds)
 
         # cer
@@ -101,6 +141,21 @@ def main():
         gt_lens = lens.detach().cpu().numpy()
         cer = calc_cer(gt_text, pd_text, gt_lens)
         final_cer += cer / loader_size
+
+        # loss
+        final_loss += model.calc_loss(log_probs,
+                                      text,
+                                      lens).item() / loader_size
+
+        # attention
+        if args.save_atts and (atts is not None):
+            atts_dir = args.model_path.parent.parent / 'atts'
+            atts_dir.mkdir(exist_ok=True)
+
+            for im, att, img_path in zip(img, atts, paths):
+                img_dir = atts_dir / img_path.stem
+                img_dir.mkdir(exist_ok=True)
+                draw_attention(im, att, pd_text, img_dir)
 
         # save errors
         if (args.save_errors_to is not None) and cer > 0:
@@ -123,6 +178,7 @@ def main():
             json.dump(errors, fp=f, indent=4)
 
     print(('Mean CER: %.3f' % final_cer) + '%')
+    print(('Mean loss: %.3f' % final_loss) + '%')
 
 
 if __name__ == '__main__':
