@@ -8,6 +8,7 @@ import numpy as np
 import albumentations as albu
 import torch.nn.functional as F
 
+from tqdm import tqdm
 from pathlib import Path
 from torch.utils.data import Dataset
 from xml.etree import ElementTree as ET
@@ -30,7 +31,8 @@ class IAMDataset(Dataset):
                  max_len=300,
                  augment=False,
                  correction=True,
-                 return_path=False):
+                 return_path=False,
+                 load_to_ram=False):
         """Initialize IAM dataset.
 
         Parameters
@@ -56,6 +58,8 @@ class IAMDataset(Dataset):
             Correct slant, skew and contrast.
         return_path : bool
             Return the path of an image in __getitem__.
+        load_to_ram : bool
+            Load images to RAM.
 
         """
         self.return_path = return_path
@@ -66,6 +70,7 @@ class IAMDataset(Dataset):
         self.width = width
         self.max_len = max_len
         self.augment = augment
+        self.load_to_ram = load_to_ram
 
         # read images from split only
         with open(split_filepath, 'r') as f:
@@ -109,14 +114,16 @@ class IAMDataset(Dataset):
                 corr_transform
             ])
 
-    def __len__(self):
-        return len(self.imgs_paths)
+        self.images = None
+        if self.load_to_ram:
+            self.images = []
+            for img_path in tqdm(self.imgs_paths, desc='Loading images to RAM'):
+                self.images.append(self.get_image(img_path))
 
-    def __getitem__(self, idx):
-        img_path = self.imgs_paths[idx]
+    def get_image(self, img_path):
         img = cv2.imread(str(img_path), cv2.IMREAD_GRAYSCALE)
-
         img = self.transform(image=img)['image']
+
         if self.width is not None:
             if self.width < img.shape[-1]:
                 print('WARNING: padding width is lower than actual image width')
@@ -125,7 +132,17 @@ class IAMDataset(Dataset):
                                          self.width - img.shape[-1],
                                          cv2.BORDER_REPLICATE)
 
-        img = (torch.tensor(img).unsqueeze(0) / 255.0)
+        return (torch.tensor(img).unsqueeze(0) / 255.0)
+
+    def __len__(self):
+        return len(self.imgs_paths)
+
+    def __getitem__(self, idx):
+        img_path = self.imgs_paths[idx]
+        if self.images is not None:
+            img = self.images[idx]
+        else:
+            img = self.get_image(img_path)
 
         text = self.markup[idx]
         length = self.lens[idx]
