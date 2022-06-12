@@ -108,7 +108,8 @@ def main():
                     width=getattr(ckpt['args'], 'img_max_width'),
                     max_len=text_max_len,
                     augment=False,
-                    return_path=True)
+                    return_path=True,
+                    correction=getattr(ckpt['args'], 'correction', True))
     dl = DataLoader(ds, args.bs, num_workers=4, collate_fn=ds.collate_fn)
 
     print('Model creation')
