@@ -154,6 +154,10 @@ def save_model(model, optim, args, ep, metrics, best_metrics, models_dir):
                  'best_metrics': best_metrics,
                  'i2c': model.i2c}
 
+    # save last model anyway
+    torch.save(save_data, models_dir / 'last.pth')
+
+    # save model if some metrics are better
     for m in metrics.keys():
         for stage in ['train', 'valid']:
             if metrics[m][stage] < best_metrics[m][stage]:
