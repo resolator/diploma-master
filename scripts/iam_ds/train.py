@@ -74,6 +74,9 @@ def get_args():
                              'Needed for stable validation process.')
     parser.add_argument('--load-to-ram', action='store_true',
                         help='Load images to ram. Don\'t use with --augment.')
+    parser.add_argument('--early-stopping', type=int, default=0,
+                        help='Stop training if valid-cer was not updated for '
+                             'this number of epochs (0 = no stopping).')
 
     # common models args
     parser.add_argument('--backbone-out', type=int, default=256,
@@ -144,7 +147,7 @@ def get_args():
     return parser.parse_args()
 
 
-def save_model(model, optim, args, ep, metrics, best_metrics, models_dir):
+def save_model(model, optim, args, ep, es, metrics, best_metrics, models_dir):
     """Save best models and update best metrics."""
     save_data = {'model': model.state_dict(),
                  'optim': optim.state_dict(),
@@ -152,8 +155,13 @@ def save_model(model, optim, args, ep, metrics, best_metrics, models_dir):
                  'epoch': ep,
                  'metrics': metrics,
                  'best_metrics': best_metrics,
-                 'i2c': model.i2c}
+                 'i2c': model.i2c,
+                 'es': es}
 
+    # save last model anyway
+    torch.save(save_data, models_dir / 'last.pth')
+
+    # save model if some metrics are better
     for m in metrics.keys():
         for stage in ['train', 'valid']:
             if metrics[m][stage] < best_metrics[m][stage]:
@@ -173,6 +181,7 @@ def load_ckpt(ckpt_path,
               fe_only=False):
     ckpt = torch.load(ckpt_path, map_location=device)
     ep = 1
+    es = {'valid_cer': np.inf, 'update_epoch': ep - 1}
 
     if model_only:
         print('\nLoading model only')
@@ -191,11 +200,13 @@ def load_ckpt(ckpt_path,
         optim.load_state_dict(ckpt['optim'])
         best_metrics = ckpt['best_metrics']
         ep = ckpt['epoch'] + 1
+        if 'es' in ckpt:
+            es = ckpt['es']
 
     print('\nCheckpoint metrics:')
     pprint(ckpt['metrics'])
 
-    return model, optim, best_metrics, ep
+    return model, optim, best_metrics, ep, es
 
 
 def main():
@@ -257,8 +268,9 @@ def main():
 
     # continue training if needed
     ep = 1
+    es = {'valid_cer': np.inf, 'update_epoch': ep - 1}
     if args.ckpt_path is not None:
-        model, optim, best_metrics, ep = load_ckpt(
+        model, optim, best_metrics, ep, es = load_ckpt(
             args.ckpt_path,
             model,
             optim,
@@ -296,8 +308,24 @@ def main():
         pprint(best_metrics)
 
         # save best models and update best metrics
-        save_model(model, optim, args, ep, metrics, best_metrics, models_dir)
+        save_model(
+            model, optim, args, ep, es, metrics, best_metrics, models_dir
+        )
         writer.flush()
+
+        # early stopping
+        if args.early_stopping > 0:
+            # try to update the metric
+            if es['valid_cer'] > best_metrics['cer']['valid']:
+                es['valid_cer'] = best_metrics['cer']['valid']
+                es['update_epoch'] = ep
+            else:
+                # check if early stopping is reached
+                if (ep - es['update_epoch']) >= args.early_stopping:
+                    print('Training is done - early stopping is reached.')
+                    exit(0)
+
+            print('Current early stopping state:', es)
 
         ep += 1
         cur_training_epochs += 1
@@ -306,6 +334,7 @@ def main():
         if cur_training_epochs == args.freeze_backbone:
             model.fe.defrost()
 
+    print('Training is done - epoch numbers is reached.')
 
 if __name__ == '__main__':
     main()
