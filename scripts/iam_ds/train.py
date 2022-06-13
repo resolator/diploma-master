@@ -144,7 +144,7 @@ def get_args():
     return parser.parse_args()
 
 
-def save_model(model, optim, args, ep, metrics, best_metrics, models_dir):
+def save_model(model, optim, args, ep, es, metrics, best_metrics, models_dir):
     """Save best models and update best metrics."""
     save_data = {'model': model.state_dict(),
                  'optim': optim.state_dict(),
@@ -152,7 +152,8 @@ def save_model(model, optim, args, ep, metrics, best_metrics, models_dir):
                  'epoch': ep,
                  'metrics': metrics,
                  'best_metrics': best_metrics,
-                 'i2c': model.i2c}
+                 'i2c': model.i2c,
+                 'es': es}
 
     # save last model anyway
     torch.save(save_data, models_dir / 'last.pth')
@@ -177,6 +178,7 @@ def load_ckpt(ckpt_path,
               fe_only=False):
     ckpt = torch.load(ckpt_path, map_location=device)
     ep = 1
+    es = {'valid_cer': np.inf, 'update_epoch': ep - 1}
 
     if model_only:
         print('\nLoading model only')
@@ -195,11 +197,13 @@ def load_ckpt(ckpt_path,
         optim.load_state_dict(ckpt['optim'])
         best_metrics = ckpt['best_metrics']
         ep = ckpt['epoch'] + 1
+        if 'es' in ckpt:
+            es = ckpt['es']
 
     print('\nCheckpoint metrics:')
     pprint(ckpt['metrics'])
 
-    return model, optim, best_metrics, ep
+    return model, optim, best_metrics, ep, es
 
 
 def main():
@@ -261,8 +265,9 @@ def main():
 
     # continue training if needed
     ep = 1
+    es = {'valid_cer': np.inf, 'update_epoch': ep - 1}
     if args.ckpt_path is not None:
-        model, optim, best_metrics, ep = load_ckpt(
+        model, optim, best_metrics, ep, es = load_ckpt(
             args.ckpt_path,
             model,
             optim,
@@ -279,7 +284,6 @@ def main():
     # print the number of model's parameters
     print_model_params(list(model.parameters()))
 
-    es = {'valid_cer': np.inf, 'update_epoch': ep}
     cur_training_epochs = 0  # number of completed epochs for the current launch
     while ep != args.epochs + 1:
         print(f'\nEpoch #{ep}')
@@ -301,11 +305,10 @@ def main():
         pprint(best_metrics)
 
         # save best models and update best metrics
-        save_model(model, optim, args, ep, metrics, best_metrics, models_dir)
+        save_model(
+            model, optim, args, ep, es, metrics, best_metrics, models_dir
+        )
         writer.flush()
-
-        ep += 1
-        cur_training_epochs += 1
 
         # early stopping
         if args.early_stopping > 0:
@@ -315,11 +318,14 @@ def main():
                 es['update_epoch'] = ep
             else:
                 # check if early stopping is reached
-                if (ep - es['update_epoch']) > args.early_stopping:
+                if (ep - es['update_epoch']) >= args.early_stopping:
                     print('Training is done - early stopping is reached.')
                     exit(0)
 
             print('Current early stopping state:', es)
+
+        ep += 1
+        cur_training_epochs += 1
 
         # defrost if needed
         if cur_training_epochs == args.freeze_backbone:
