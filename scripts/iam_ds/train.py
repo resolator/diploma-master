@@ -315,6 +315,8 @@ def main():
                     print('Training is done - early stopping is reached.')
                     exit(0)
 
+            print('Current early stopping state:', es)
+
         # defrost if needed
         if cur_training_epochs == args.freeze_backbone:
             model.fe.defrost()
