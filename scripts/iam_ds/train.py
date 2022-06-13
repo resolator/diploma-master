@@ -74,6 +74,9 @@ def get_args():
                              'Needed for stable validation process.')
     parser.add_argument('--load-to-ram', action='store_true',
                         help='Load images to ram. Don\'t use with --augment.')
+    parser.add_argument('--early-stopping', type=int, default=0,
+                        help='Stop training if valid-cer was not updated for '
+                             'this number of epochs (0 = no stopping).')
 
     # common models args
     parser.add_argument('--backbone-out', type=int, default=256,
@@ -272,6 +275,7 @@ def main():
     # print the number of model's parameters
     print_model_params(list(model.parameters()))
 
+    es = {'valid_cer': np.inf, 'update_epoch': ep}
     cur_training_epochs = 0  # number of completed epochs for the current launch
     while ep != args.epochs + 1:
         print(f'\nEpoch #{ep}')
@@ -299,10 +303,23 @@ def main():
         ep += 1
         cur_training_epochs += 1
 
+        # early stopping
+        if args.early_stopping > 0:
+            # try to update the metric
+            if es['valid_cer'] > best_metrics['cer']['valid']:
+                es['valid_cer'] = best_metrics['cer']['valid']
+                es['update_epoch'] = ep
+            else:
+                # check if early stopping is reached
+                if (ep - es['update_epoch']) > args.early_stopping:
+                    print('Training is done - early stopping is reached.')
+                    exit(0)
+
         # defrost if needed
         if cur_training_epochs == args.freeze_backbone:
             model.fe.defrost()
 
+    print('Training is done - epoch numbers is reached.')
 
 if __name__ == '__main__':
     main()
