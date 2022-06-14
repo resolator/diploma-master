@@ -1,6 +1,6 @@
 import timm
 from torch import nn
-from .layers import FlexibleLayerNorm
+from .layers import FlexibleLayerNorm, DepthwiseSepConv2D, Gate
 
 
 def get_models_list():
@@ -10,11 +10,12 @@ def get_models_list():
 def get_backbone(name='conv_net6',
                  out_channels=256,
                  dropout=0.15,
-                 expand_h=False):
+                 expand_h=False,
+                 gates=0):
     if name == 'conv_net5':
         return ConvNet5(out_channels, dropout), out_channels
     elif name == 'conv_net6':
-        return ConvNet6(out_channels, dropout, expand_h), out_channels
+        return ConvNet6(out_channels, dropout, expand_h, gates), out_channels
     elif name == 'resnet18':
         print('WARNING: backbone out channels is forced to 256 for resnet.')
         fe = timm.create_model(name,
@@ -34,14 +35,36 @@ def get_backbone(name='conv_net6',
     else:
         raise AssertionError('backbone must be in:', get_models_list())
 
+class BaseNet(nn.Module):
+    def __init__(self):
+        super().__init__()
 
-class ConvNet6(nn.Module):
-    def __init__(self, out_channels=256, dropout=0.15, expand_h=False):
+    def freeze(self):
+        """Freeze the network."""
+        for param in self.parameters():
+            param.requires_grad = False
+
+        print('\n[INFO] The backbone has been frozen.\n')
+
+    def defrost(self):
+        """Defrost the network."""
+        for param in self.parameters():
+            param.requires_grad = True
+
+        print('\n[INFO] The backbone has been defrost.\n')
+
+
+class ConvNet6(BaseNet):
+    def __init__(self,
+                 out_channels=256,
+                 dropout=0.15,
+                 expand_h=False,
+                 gates=0):
         super().__init__()
 
         print('========== ConvNet6 args ==========')
-        print('out_channels: {}; dropout: {}; expand_h: {};'.format(
-            out_channels, dropout, expand_h
+        print('out_channels: {}; dropout: {}; expand_h: {}; gates: {};'.format(
+            out_channels, dropout, expand_h, gates
         ))
 
         self.fe = nn.Sequential(
@@ -78,6 +101,12 @@ class ConvNet6(nn.Module):
             nn.Dropout(dropout)
         )
 
+        self.gates = None
+        if gates > 0:
+            self.gates = nn.Sequential(
+                *[ConvNet6.get_gate_block(out_channels) for _ in range(gates)]
+            )
+
     def forward(self, x):
         """Forward pass.
 
@@ -93,24 +122,22 @@ class ConvNet6(nn.Module):
             expand_h=False and (BS, out_channels, H // 16, W // 4) otherwise.
 
         """
-        return self.fe(x)
+        x = self.fe(x)
+        if self.gates is not None:
+            x = self.gates(x)
 
-    def freeze(self):
-        """Freeze the network."""
-        for param in self.parameters():
-            param.requires_grad = False
+        return x
 
-        print('\n[INFO] The backbone has been frozen.\n')
-
-    def defrost(self):
-        """Defrost the network."""
-        for param in self.parameters():
-            param.requires_grad = True
-
-        print('\n[INFO] The backbone has been defrost.\n')
+    @staticmethod
+    def get_gate_block(channels):
+        return nn.Sequential(
+            DepthwiseSepConv2D(channels, channels * 2, (1, 9)),
+            Gate(dim=[-2, -1]),
+            nn.Dropout(0.4)
+        )
 
 
-class ConvNet5(nn.Module):
+class ConvNet5(BaseNet):
     def __init__(self, out_channels=256, dropout=0.15):
         super().__init__()
 
@@ -162,17 +189,3 @@ class ConvNet5(nn.Module):
 
         """
         return self.fe(x)
-
-    def freeze(self):
-        """Freeze the network."""
-        for param in self.parameters():
-            param.requires_grad = False
-
-        print('\n[INFO] The backbone has been frozen.\n')
-
-    def defrost(self):
-        """Defrost the network."""
-        for param in self.parameters():
-            param.requires_grad = True
-
-        print('\n[INFO] The backbone has been defrost.\n')
