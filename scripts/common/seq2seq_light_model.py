@@ -6,7 +6,10 @@ import numpy as np
 from torch import nn
 from torch.nn import functional as F
 from .conv_net import get_backbone
-from .layers import PositionalEncoder, PositionalEncoder2D
+from .layers import (PositionalEncoder,
+                     PositionalEncoder2D,
+                     FlexibleLayerNorm,
+                     DepthwiseSepConv2D)
 
 
 class Seq2seqLightModel(nn.Module):
@@ -109,7 +112,7 @@ class Decoder(nn.Module):
         self.max_len = text_max_len
         self.teacher_rate = teacher_rate
         self.dec_hs = dec_hs
-        self.n_layers = n_layers    
+        self.n_layers = n_layers
 
         self.emb = nn.Embedding(alphabet_size, emb_sz)
         self.dropout = nn.Dropout(self.dropout_p)
@@ -185,9 +188,16 @@ class BahdanauAttention(nn.Module):
     def __init__(self, enc_hs=256, dec_hs=384, attn_size=512):
         super().__init__()
 
-        self.encoder_conv = nn.Conv2d(enc_hs, attn_size, 1)
         self.decoder_linear = nn.Linear(dec_hs, attn_size)
-        self.energy_layer = nn.Conv2d(attn_size, 1, 1)
+        self.encoder_conv = DepthwiseSepConv2D(
+            enc_hs, attn_size, (3, 3), (1, 1), (1, 1)
+        )
+        self.energy_layer = nn.Sequential(
+            DepthwiseSepConv2D(enc_hs, attn_size // 2, (3, 3), (1, 1), (1, 1)),
+            FlexibleLayerNorm([-2, -1]),
+            nn.ReLU(),
+            nn.Conv2d(attn_size // 2, 1, 1)
+        )
 
     def forward(self, dec_h, weighted_enc_out, enc_out):
         weighted_dec_hs = self.decoder_linear(dec_h).unsqueeze(2).unsqueeze(3)
