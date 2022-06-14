@@ -11,11 +11,16 @@ def get_backbone(name='conv_net6',
                  out_channels=256,
                  dropout=0.15,
                  expand_h=False,
+                 height=64,
                  gates=0):
     if name == 'conv_net5':
         return ConvNet5(out_channels, dropout), out_channels
     elif name == 'conv_net6':
-        return ConvNet6(out_channels, dropout, expand_h, gates), out_channels
+        return ConvNet6(out_channels,
+                        dropout,
+                        expand_h,
+                        height,
+                        gates), out_channels
     elif name == 'resnet18':
         print('WARNING: backbone out channels is forced to 256 for resnet.')
         fe = timm.create_model(name,
@@ -59,13 +64,18 @@ class ConvNet6(BaseNet):
                  out_channels=256,
                  dropout=0.15,
                  expand_h=False,
+                 height=64,
                  gates=0):
         super().__init__()
 
         print('========== ConvNet6 args ==========')
-        print('out_channels: {}; dropout: {}; expand_h: {}; gates: {};'.format(
-            out_channels, dropout, expand_h, gates
+        print('out_channels: {}; dropout: {}; expand_h: {}; height: {}; '
+              'gates: {};'.format(
+            out_channels, dropout, expand_h, height, gates
         ))
+
+        heights = (64, 128)
+        assert height in heights, 'height must be in ' + heights
 
         self.fe = nn.Sequential(
             nn.Conv2d(1, 32, (5, 5), (1, 1), (2, 2)),
@@ -81,7 +91,7 @@ class ConvNet6(BaseNet):
             nn.Conv2d(64, 128, (3, 3), (1, 1), (1, 1)),
             FlexibleLayerNorm([-2, -1]),
             nn.ReLU(),
-            nn.MaxPool2d((2, 1)),
+            nn.MaxPool2d((2, 1 if height == 64 else 2)),
 
             nn.Conv2d(128, 128, (3, 3), (1, 1), (1, 1)),
             FlexibleLayerNorm([-2, -1]),
