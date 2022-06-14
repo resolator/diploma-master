@@ -6,7 +6,7 @@ import numpy as np
 from torch import nn
 from torch.nn import functional as F
 from .conv_net import get_backbone
-from .layers import PositionalEncoder, PositionalEncoder2D, FlexibleLayerNorm
+from .layers import PositionalEncoder, PositionalEncoder2D
 
 
 class Seq2seqLightModel(nn.Module):
@@ -24,7 +24,7 @@ class Seq2seqLightModel(nn.Module):
                  teacher_rate=0.9,
                  fe_dropout=0.15,
                  expand_h=False,
-                 gated=False):
+                 gates=0):
         super().__init__()
         self.i2c = i2c
         self.c2i = c2i
@@ -37,7 +37,7 @@ class Seq2seqLightModel(nn.Module):
             out_channels=self.backbone_out,
             dropout=fe_dropout,
             expand_h=expand_h,
-            gated=gated
+            gates=gates
         )
         pe_class = PositionalEncoder2D if expand_h else PositionalEncoder
         self.pe = pe_class(self.backbone_out) if pe else None
@@ -165,9 +165,9 @@ class BahdanauAttention(nn.Module):
     def __init__(self, enc_hs=256, dec_hs=384, attn_size=512):
         super().__init__()
 
-        self.encoder_conv = nn.Conv2d(enc_hs, attn_size, (3, 3), (1, 1), (1, 1))
+        self.encoder_conv = nn.Conv2d(enc_hs, attn_size, 1)
         self.decoder_linear = nn.Linear(dec_hs, attn_size)
-        self.energy_layer = nn.Conv2d(attn_size, 1, (3, 3), (1, 1), (1, 1))
+        self.energy_layer = nn.Conv2d(attn_size, 1, 1)
 
     def forward(self, dec_h, weighted_enc_out, enc_out):
         weighted_dec_hs = self.decoder_linear(dec_h).unsqueeze(2).unsqueeze(3)

@@ -66,7 +66,7 @@ def create_model(c2i, i2c, args):
             teacher_rate=args.teacher_rate,
             backbone=getattr(args, 'backbone', 'conv_net6'),
             expand_h=getattr(args, 'expand_h', False),
-            gated=getattr(args, 'gated', False),
+            gates=getattr(args, 'gates', 0),
             **common_args
         )
     elif args.model_type == 'seg_attn':
