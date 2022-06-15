@@ -26,6 +26,7 @@ class Seq2seqLightModel(nn.Module):
                  teacher_rate=0.9,
                  fe_dropout=0.15,
                  expand_h=False,
+                 k=4,
                  rnn_type='lstm',
                  gates=0):
         super().__init__()
@@ -40,6 +41,7 @@ class Seq2seqLightModel(nn.Module):
             out_channels=self.backbone_out,
             dropout=fe_dropout,
             expand_h=expand_h,
+            k=k,
             gates=gates
         )
         pe_class = PositionalEncoder2D if expand_h else PositionalEncoder

@@ -11,11 +11,12 @@ def get_backbone(name='conv_net6',
                  out_channels=256,
                  dropout=0.15,
                  expand_h=False,
+                 k=4,
                  gates=0):
     if name == 'conv_net5':
         return ConvNet5(out_channels, dropout), out_channels
     elif name == 'conv_net6':
-        return ConvNet6(out_channels, dropout, expand_h, gates), out_channels
+        return ConvNet6(out_channels, dropout, expand_h, k, gates), out_channels
     elif name == 'resnet18':
         print('WARNING: backbone out channels is forced to 256 for resnet.')
         fe = timm.create_model(name,
@@ -59,6 +60,7 @@ class ConvNet6(BaseNet):
                  out_channels=256,
                  dropout=0.15,
                  expand_h=False,
+                 k=4,
                  gates=0):
         super().__init__()
 
@@ -67,7 +69,6 @@ class ConvNet6(BaseNet):
             out_channels, dropout, expand_h, gates
         ))
 
-        k = 4
         self.fe = nn.Sequential(
             DepthwiseSepConv2D(1, 32, (5, 5), (1, 1), (2, 2), k=k),
             FlexibleLayerNorm([-2, -1]),
