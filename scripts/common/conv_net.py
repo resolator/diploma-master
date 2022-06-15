@@ -86,7 +86,7 @@ class ConvNet6(BaseNet):
             nn.Conv2d(128, 128, (3, 3), (1, 1), (1, 1)),
             FlexibleLayerNorm([-2, -1]),
             nn.ReLU(),
-            nn.MaxPool2d((2, 1)),
+            nn.Identity() if expand_h else nn.MaxPool2d((2, 1)),
 
             nn.Conv2d(128, 256, (3, 3), (1, 1), (1, 1)),
             FlexibleLayerNorm([-2, -1]),
