@@ -67,33 +67,34 @@ class ConvNet6(BaseNet):
             out_channels, dropout, expand_h, gates
         ))
 
+        k = 4
         self.fe = nn.Sequential(
-            nn.Conv2d(1, 32, (5, 5), (1, 1), (2, 2)),
+            DepthwiseSepConv2D(1, 32, (5, 5), (1, 1), (2, 2), k=k),
             FlexibleLayerNorm([-2, -1]),
             nn.ReLU(),
             nn.MaxPool2d((2, 2)),
 
-            nn.Conv2d(32, 64, (5, 5), (1, 1), (2, 2)),
+            DepthwiseSepConv2D(32, 64, (5, 5), (1, 1), (2, 2), k=k),
             FlexibleLayerNorm([-2, -1]),
             nn.ReLU(),
             nn.MaxPool2d((2, 2)),
 
-            nn.Conv2d(64, 128, (3, 3), (1, 1), (1, 1)),
+            DepthwiseSepConv2D(64, 128, (3, 3), (1, 1), (1, 1), k=k),
             FlexibleLayerNorm([-2, -1]),
             nn.ReLU(),
             nn.MaxPool2d((2, 1)),
 
-            nn.Conv2d(128, 128, (3, 3), (1, 1), (1, 1)),
+            DepthwiseSepConv2D(128, 128, (3, 3), (1, 1), (1, 1), k=k),
             FlexibleLayerNorm([-2, -1]),
             nn.ReLU(),
             nn.MaxPool2d((2, 1)),
 
-            nn.Conv2d(128, 256, (3, 3), (1, 1), (1, 1)),
+            DepthwiseSepConv2D(128, 256, (3, 3), (1, 1), (1, 1), k=k),
             FlexibleLayerNorm([-2, -1]),
             nn.ReLU(),
             nn.Identity() if expand_h else nn.MaxPool2d((2, 1)),
 
-            nn.Conv2d(256, out_channels, (1, 1)),
+            DepthwiseSepConv2D(256, out_channels, (1, 1), k=k),
             FlexibleLayerNorm([-2, -1]),
             nn.ReLU(),
             nn.Identity() if expand_h else nn.MaxPool2d((2, 1)),
