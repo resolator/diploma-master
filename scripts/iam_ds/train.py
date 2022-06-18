@@ -82,6 +82,8 @@ def get_args():
     parser.add_argument('--gates', type=int, default=0,
                         help='Use (DSC+G+D) x gates as the end of a ConvNet6 '
                              'backbone.')
+    parser.add_argument('--gate-dropout', type=float, default=0.4,
+                        help='Dropout for gate blocks.')
     parser.add_argument('--backbone-out', type=int, default=256,
                         help='Backbone out channels number (for custom only).')
     parser.add_argument('--fe-dropout', type=float, default=0.15,

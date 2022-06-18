@@ -11,11 +11,16 @@ def get_backbone(name='conv_net6',
                  out_channels=256,
                  dropout=0.15,
                  expand_h=False,
-                 gates=0):
+                 gates=0,
+                 gate_dropout=0.4):
     if name == 'conv_net5':
         return ConvNet5(out_channels, dropout), out_channels
     elif name == 'conv_net6':
-        return ConvNet6(out_channels, dropout, expand_h, gates), out_channels
+        return ConvNet6(out_channels,
+                        dropout,
+                        expand_h,
+                        gates,
+                        gate_dropout), out_channels
     elif name == 'resnet18':
         print('WARNING: backbone out channels is forced to 256 for resnet.')
         fe = timm.create_model(name,
@@ -59,12 +64,14 @@ class ConvNet6(BaseNet):
                  out_channels=256,
                  dropout=0.15,
                  expand_h=False,
-                 gates=0):
+                 gates=0,
+                 gate_dropout=0.4):
         super().__init__()
 
         print('========== ConvNet6 args ==========')
-        print('out_channels: {}; dropout: {}; expand_h: {}; gates: {};'.format(
-            out_channels, dropout, expand_h, gates
+        print('out_channels: {}; dropout: {}; expand_h: {}; gates: {}; '
+              'gate_dropout: {};'.format(
+            out_channels, dropout, expand_h, gates, gate_dropout
         ))
 
         self.fe = nn.Sequential(
@@ -104,7 +111,8 @@ class ConvNet6(BaseNet):
         self.gates = None
         if gates > 0:
             self.gates = nn.Sequential(
-                *[ConvNet6.get_gate_block(out_channels) for _ in range(gates)]
+                *[ConvNet6.get_gate_block(out_channels, gate_dropout)
+                  for _ in range(gates)]
             )
 
     def forward(self, x):
@@ -129,11 +137,11 @@ class ConvNet6(BaseNet):
         return x
 
     @staticmethod
-    def get_gate_block(channels):
+    def get_gate_block(channels, dropout=0.4):
         return nn.Sequential(
             DepthwiseSepConv2D(channels, channels * 2, (1, 9)),
             Gate(dim=[-2, -1]),
-            nn.Dropout(0.4)
+            nn.Dropout(dropout)
         )
 
 
