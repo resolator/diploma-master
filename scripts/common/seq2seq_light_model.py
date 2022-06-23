@@ -111,9 +111,10 @@ class Decoder(nn.Module):
         self.max_len = text_max_len
         self.teacher_rate = teacher_rate
         self.dec_hs = dec_hs
-        self.n_layers = n_layers    
+        self.n_layers = n_layers
 
         self.emb = nn.Embedding(alphabet_size, emb_sz)
+        self.input_dropout = nn.Dropout(self.dropout_p)
         self.dropout = nn.Dropout(self.dropout_p)
 
         rnn_f = nn.LSTM if self.rnn_type == 'lstm' else nn.GRU
@@ -121,7 +122,10 @@ class Decoder(nn.Module):
                          hidden_size=self.dec_hs,
                          num_layers=n_layers,
                          dropout=rnn_dropout)
-        self.attention = BahdanauAttention(enc_hs, self.dec_hs, attn_sz)
+        self.attention = BahdanauAttention(enc_hs,
+                                           self.dec_hs,
+                                           attn_sz,
+                                           self.dropout_p)
         self.linear = nn.Linear(self.dec_hs, alphabet_size)
 
     def forward_step(self, x, enc_out, weighted_enc_out, hc):
@@ -131,7 +135,7 @@ class Decoder(nn.Module):
             dec_h = hc[-1]
 
         context, attn_probs = self.attention(dec_h, weighted_enc_out, enc_out)
-        rnn_x = torch.cat([x, context], dim=1).unsqueeze(0)
+        rnn_x = self.input_dropout(torch.cat([x, context], dim=1).unsqueeze(0))
         y, hc = self.rnn(rnn_x, hc)
         logits = self.linear(self.dropout(y.squeeze(0)))
 
@@ -184,11 +188,12 @@ class Decoder(nn.Module):
 
 
 class BahdanauAttention(nn.Module):
-    def __init__(self, enc_hs=256, dec_hs=384, attn_size=512):
+    def __init__(self, enc_hs=256, dec_hs=384, attn_size=256, dropout=0.15):
         super().__init__()
 
         self.encoder_conv = nn.Conv2d(enc_hs, attn_size, 1)
-        self.decoder_linear = nn.Linear(dec_hs, attn_size)
+        self.decoder_linear = nn.Sequential(nn.Dropout(dropout),
+                                            nn.Linear(dec_hs, attn_size))
         self.energy_layer = nn.Conv2d(attn_size, 1, 1)
 
     def forward(self, dec_h, weighted_enc_out, enc_out):
