@@ -168,9 +168,9 @@ class DepthwiseSepConv2D(nn.Module):
 
         """
         super().__init__()
-        self.dep_conv = nn.Conv2d(in_c, in_c, ks, s, p, groups=in_c * k,
+        self.dep_conv = nn.Conv2d(in_c, in_c * k, ks, s, p, groups=in_c,
                                   bias=bias)
-        self.point_conv = nn.Conv2d(in_c, out_c, (1, 1), bias=bias)
+        self.point_conv = nn.Conv2d(in_c * k, out_c, (1, 1), bias=bias)
 
     def forward(self, x):
         return(self.point_conv(self.dep_conv(x)))

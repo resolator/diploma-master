@@ -26,6 +26,7 @@ class Seq2seqLightModel(nn.Module):
                  teacher_rate=0.9,
                  fe_dropout=0.15,
                  expand_h=False,
+                 k=1,
                  rnn_type='lstm',
                  gates=0,
                  gate_dropout=0.4):
@@ -41,6 +42,7 @@ class Seq2seqLightModel(nn.Module):
             out_channels=self.backbone_out,
             dropout=fe_dropout,
             expand_h=expand_h,
+            k=k,
             gates=gates,
             gate_dropout=gate_dropout
         )

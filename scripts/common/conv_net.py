@@ -12,6 +12,7 @@ def get_backbone(name='conv_net6',
                  dropout=0.15,
                  expand_h=False,
                  gates=0,
+                 k=1,
                  gate_dropout=0.4):
     if name == 'conv_net5':
         return ConvNet5(out_channels, dropout), out_channels
@@ -19,6 +20,7 @@ def get_backbone(name='conv_net6',
         return ConvNet6(out_channels,
                         dropout,
                         expand_h,
+                        k,
                         gates,
                         gate_dropout), out_channels
     elif name == 'resnet18':
@@ -64,14 +66,15 @@ class ConvNet6(BaseNet):
                  out_channels=256,
                  dropout=0.15,
                  expand_h=False,
+                 k=1,
                  gates=0,
                  gate_dropout=0.4):
         super().__init__()
 
         print('========== ConvNet6 args ==========')
-        print('out_channels: {}; dropout: {}; expand_h: {}; gates: {}; '
+        print('out_channels: {}; dropout: {}; expand_h: {}; k: {}; gates: {}; '
               'gate_dropout: {};'.format(
-            out_channels, dropout, expand_h, gates, gate_dropout
+            out_channels, dropout, expand_h, k, gates, gate_dropout
         ))
 
         self.fe = nn.Sequential(
@@ -111,7 +114,7 @@ class ConvNet6(BaseNet):
         self.gates = None
         if gates > 0:
             self.gates = nn.Sequential(
-                *[ConvNet6.get_gate_block(out_channels, gate_dropout)
+                *[ConvNet6.get_gate_block(out_channels, k, gate_dropout)
                   for _ in range(gates)]
             )
 
@@ -137,9 +140,9 @@ class ConvNet6(BaseNet):
         return x
 
     @staticmethod
-    def get_gate_block(channels, dropout=0.4):
+    def get_gate_block(channels, k, dropout=0.4):
         return nn.Sequential(
-            DepthwiseSepConv2D(channels, channels * 2, (1, 9)),
+            DepthwiseSepConv2D(channels, channels * 2, (1, 9), k=k),
             Gate(dim=[-2, -1]),
             nn.Dropout(dropout)
         )
