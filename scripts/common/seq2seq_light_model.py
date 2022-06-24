@@ -26,7 +26,7 @@ class Seq2seqLightModel(nn.Module):
                  teacher_rate=0.9,
                  fe_dropout=0.15,
                  expand_h=False,
-                 k=4,
+                 k=1,
                  rnn_type='lstm',
                  gates=0):
         super().__init__()

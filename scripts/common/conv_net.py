@@ -11,7 +11,7 @@ def get_backbone(name='conv_net6',
                  out_channels=256,
                  dropout=0.15,
                  expand_h=False,
-                 k=4,
+                 k=1,
                  gates=0):
     if name == 'conv_net5':
         return ConvNet5(out_channels, dropout), out_channels
@@ -60,7 +60,7 @@ class ConvNet6(BaseNet):
                  out_channels=256,
                  dropout=0.15,
                  expand_h=False,
-                 k=4,
+                 k=1,
                  gates=0):
         super().__init__()
 
@@ -70,32 +70,32 @@ class ConvNet6(BaseNet):
         ))
 
         self.fe = nn.Sequential(
-            DepthwiseSepConv2D(1, 32, (5, 5), (1, 1), (2, 2), k=k),
+            nn.Conv2d(1, 32, (5, 5), (1, 1), (2, 2)),
             FlexibleLayerNorm([-2, -1]),
             nn.ReLU(),
             nn.MaxPool2d((2, 2)),
 
-            DepthwiseSepConv2D(32, 64, (5, 5), (1, 1), (2, 2), k=k),
+            nn.Conv2d(32, 64, (5, 5), (1, 1), (2, 2)),
             FlexibleLayerNorm([-2, -1]),
             nn.ReLU(),
             nn.MaxPool2d((2, 2)),
 
-            DepthwiseSepConv2D(64, 128, (3, 3), (1, 1), (1, 1), k=k),
+            nn.Conv2d(64, 128, (3, 3), (1, 1), (1, 1)),
             FlexibleLayerNorm([-2, -1]),
             nn.ReLU(),
             nn.MaxPool2d((2, 1)),
 
-            DepthwiseSepConv2D(128, 128, (3, 3), (1, 1), (1, 1), k=k),
+            nn.Conv2d(128, 128, (3, 3), (1, 1), (1, 1)),
             FlexibleLayerNorm([-2, -1]),
             nn.ReLU(),
             nn.MaxPool2d((2, 1)),
 
-            DepthwiseSepConv2D(128, 256, (3, 3), (1, 1), (1, 1), k=k),
+            nn.Conv2d(128, 256, (3, 3), (1, 1), (1, 1)),
             FlexibleLayerNorm([-2, -1]),
             nn.ReLU(),
             nn.Identity() if expand_h else nn.MaxPool2d((2, 1)),
 
-            DepthwiseSepConv2D(256, out_channels, (1, 1), k=k),
+            nn.Conv2d(256, out_channels, (1, 1)),
             FlexibleLayerNorm([-2, -1]),
             nn.ReLU(),
             nn.Identity() if expand_h else nn.MaxPool2d((2, 1)),
@@ -106,7 +106,8 @@ class ConvNet6(BaseNet):
         self.gates = None
         if gates > 0:
             self.gates = nn.Sequential(
-                *[ConvNet6.get_gate_block(out_channels) for _ in range(gates)]
+                *[ConvNet6.get_gate_block(out_channels, k)
+                  for _ in range(gates)]
             )
 
     def forward(self, x):
@@ -131,9 +132,9 @@ class ConvNet6(BaseNet):
         return x
 
     @staticmethod
-    def get_gate_block(channels):
+    def get_gate_block(channels, k):
         return nn.Sequential(
-            DepthwiseSepConv2D(channels, channels * 2, (1, 9)),
+            DepthwiseSepConv2D(channels, channels * 2, (1, 9), k=k),
             Gate(dim=[-2, -1]),
             nn.Dropout(0.4)
         )

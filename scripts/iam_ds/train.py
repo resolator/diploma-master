@@ -131,7 +131,7 @@ def get_args():
     seq2seq.add_argument('--expand-h', action='store_true',
                          help='Expand height to 4 in ConvNet6 out by removing '
                               'last maxpools.')
-    seq2seq.add_argument('--dsc-k', type=int, default=4,
+    seq2seq.add_argument('--dsc-k', type=int, default=1,
                          help='K parameter for DepthwiseSepConv2D.')
 
     # add seg_attn args

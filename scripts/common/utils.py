@@ -64,7 +64,7 @@ def create_model(c2i, i2c, args):
             teacher_rate=args.teacher_rate,
             backbone=getattr(args, 'backbone', 'conv_net6'),
             expand_h=getattr(args, 'expand_h', False),
-            k=getattr(args, 'dsc_k', 4),
+            k=getattr(args, 'dsc_k', 1),
             gates=getattr(args, 'gates', 0),
             **common_args
         )
