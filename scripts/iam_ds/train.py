@@ -28,8 +28,7 @@ def get_args():
 
     # dataset
     parser.add_argument('--model-type', required=True,
-                        choices=['baseline', 'seq2seq',
-                                 'seq2seq_light', 'seg_attn'],
+                        choices=['baseline', 'seq2seq', 'seq2seq_light'],
                         help='Model type to train.')
     parser.add_argument('--ckpt-path', type=Path,
                         help='Path to saved model to load for training.')
@@ -138,21 +137,6 @@ def get_args():
     seq2seq.add_argument('--dsc-k', type=int, default=1,
                          help='K parameter for DepthwiseSepConv2D.')
 
-    # add seg_attn args
-    seg_attn = subparsers.add_parser('seg-attn-args')
-    seg_attn.add_argument('--config-seg-attn', is_config_file=True,
-                          help='Path to seg_attn config file.')
-    seg_attn.add_argument('--teacher-rate', type=float, default=1.0,
-                          help='Teacher rate for decoder training input.')
-    seg_attn.add_argument('--emb-size', type=int, default=256,
-                          help='Embedding size.')
-    seg_attn.add_argument('--backbone', default='custom',
-                          choices=['custom', 'resnet18',
-                                   'resnet34', 'efficientnet_b0'],
-                          help='Backbone type.')
-    seg_attn.add_argument('--pos-encoding', action='store_true',
-                          help='Add positional encoding before decoder.')
-
     return parser.parse_args()
 
 
@@ -236,7 +220,7 @@ def main():
     if torch.cuda.is_available():
         device = torch.device('cuda')
 
-    if args.model_type in ['seq2seq', 'seg_attn', 'seq2seq_light']:
+    if args.model_type in ['seq2seq', 'seq2seq_light']:
         c2i, i2c = build_alphabet(light=False,
                                   with_ctc_blank=False,
                                   with_sos=True)

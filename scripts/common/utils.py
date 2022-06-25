@@ -5,7 +5,6 @@ import fastwer
 from .baseline_net import BaselineNet
 from .seq2seq_model import Seq2seqModel
 from .seq2seq_light_model import Seq2seqLightModel
-from .seg_attn_model import SegAttnModel
 from string import digits, ascii_letters
 
 
@@ -33,8 +32,7 @@ def create_model(c2i, i2c, args):
     common_args = {
         'c2i': c2i,
         'i2c': i2c,
-        'dec_hs': getattr(args, 'dec_hs',
-                          512 if args.model_type == 'seg_attn' else 256),
+        'dec_hs': getattr(args, 'dec_hs',  256),
         'backbone_out': getattr(args, 'backbone_out', 256),
         'fe_dropout': getattr(args, 'fe_dropout', 0.15),
         'dec_dropout': getattr(args, 'dec_dropout', 0.2),
@@ -70,18 +68,9 @@ def create_model(c2i, i2c, args):
             gate_width=getattr(args, 'gate_width', 9),
             **common_args
         )
-    elif args.model_type == 'seg_attn':
-        model = SegAttnModel(
-            text_max_len=args.text_max_len,
-            backbone=getattr(args, 'backbone', 'custom'),
-            teacher_rate=args.teacher_rate,
-            emb_size=args.emb_size,
-            pos_enc=getattr(args, 'pos_encoding', False),
-            **common_args
-        )
     else:
         raise AssertionError(
-            'model type must be in [baseline, seq2seq, seq2seq_light, seg_attn]'
+            'model type must be in [baseline, seq2seq, seq2seq_light]'
         )
 
     return model
