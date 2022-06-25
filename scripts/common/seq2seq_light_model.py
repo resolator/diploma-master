@@ -29,7 +29,8 @@ class Seq2seqLightModel(nn.Module):
                  k=1,
                  rnn_type='lstm',
                  gates=0,
-                 gate_dropout=0.4):
+                 gate_dropout=0.4,
+                 gate_width=9):
         super().__init__()
         self.i2c = i2c
         self.c2i = c2i
@@ -44,7 +45,8 @@ class Seq2seqLightModel(nn.Module):
             expand_h=expand_h,
             k=k,
             gates=gates,
-            gate_dropout=gate_dropout
+            gate_dropout=gate_dropout,
+            gate_width=gate_width
         )
         pe_class = PositionalEncoder2D if expand_h else PositionalEncoder
         self.pe = pe_class(self.backbone_out) if pe else None

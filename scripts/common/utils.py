@@ -67,6 +67,7 @@ def create_model(c2i, i2c, args):
             k=getattr(args, 'dsc_k', 1),
             gates=getattr(args, 'gates', 0),
             gate_dropout=getattr(args, 'gate_dropout', 0.4),
+            gate_width=getattr(args, 'gate_width', 9),
             **common_args
         )
     elif args.model_type == 'seg_attn':

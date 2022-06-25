@@ -13,7 +13,8 @@ def get_backbone(name='conv_net6',
                  expand_h=False,
                  gates=0,
                  k=1,
-                 gate_dropout=0.4):
+                 gate_dropout=0.4,
+                 gate_width=9):
     if name == 'conv_net5':
         return ConvNet5(out_channels, dropout), out_channels
     elif name == 'conv_net6':
@@ -22,7 +23,8 @@ def get_backbone(name='conv_net6',
                         expand_h,
                         k,
                         gates,
-                        gate_dropout), out_channels
+                        gate_dropout,
+                        gate_width), out_channels
     elif name == 'resnet18':
         print('WARNING: backbone out channels is forced to 256 for resnet.')
         fe = timm.create_model(name,
@@ -68,13 +70,14 @@ class ConvNet6(BaseNet):
                  expand_h=False,
                  k=1,
                  gates=0,
-                 gate_dropout=0.4):
+                 gate_dropout=0.4,
+                 gate_width=9):
         super().__init__()
 
         print('========== ConvNet6 args ==========')
         print('out_channels: {}; dropout: {}; expand_h: {}; k: {}; gates: {}; '
-              'gate_dropout: {};'.format(
-            out_channels, dropout, expand_h, k, gates, gate_dropout
+              'gate_dropout: {}; gate_width: {};'.format(
+            out_channels, dropout, expand_h, k, gates, gate_dropout, gate_width
         ))
 
         self.fe = nn.Sequential(
@@ -114,7 +117,10 @@ class ConvNet6(BaseNet):
         self.gates = None
         if gates > 0:
             self.gates = nn.Sequential(
-                *[ConvNet6.get_gate_block(out_channels, k, gate_dropout)
+                *[ConvNet6.get_gate_block(out_channels,
+                                          k,
+                                          gate_dropout,
+                                          gate_width)
                   for _ in range(gates)]
             )
 
@@ -140,9 +146,9 @@ class ConvNet6(BaseNet):
         return x
 
     @staticmethod
-    def get_gate_block(channels, k, dropout=0.4):
+    def get_gate_block(channels, k, dropout=0.4, gate_width=9):
         return nn.Sequential(
-            DepthwiseSepConv2D(channels, channels * 2, (1, 9), k=k),
+            DepthwiseSepConv2D(channels, channels * 2, (1, gate_width), k=k),
             Gate(dim=[-2, -1]),
             nn.Dropout(dropout)
         )

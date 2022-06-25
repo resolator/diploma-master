@@ -84,6 +84,8 @@ def get_args():
                              'backbone.')
     parser.add_argument('--gate-dropout', type=float, default=0.4,
                         help='Dropout for gate blocks.')
+    parser.add_argument('--gate-width', type=int, default=9,
+                        help='Gates kernel width.')
     parser.add_argument('--backbone-out', type=int, default=256,
                         help='Backbone out channels number (for custom only).')
     parser.add_argument('--fe-dropout', type=float, default=0.15,
