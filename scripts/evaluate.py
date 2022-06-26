@@ -7,6 +7,7 @@ import torch
 import argparse
 import numpy as np
 
+from time import time
 from tqdm import tqdm
 from pathlib import Path
 from pprint import pprint
@@ -30,24 +31,26 @@ def get_args():
                         help='Path to the trained model.')
     parser.add_argument('--bs', type=int, default=64,
                         help='Batch size.')
-    parser.add_argument('--save-errors-to', type=Path,
-                        help='Save errors to this dir.'
+    parser.add_argument('--save-errors', action='store_true',
+                        help='Save errors to errors dir at model\'s dir level. '
                              'In this case bs will be 1.')
     parser.add_argument('--save-atts', action='store_true',
                         help='Draw attention on the image if possible and save '
                              'it to attn dir at model\'s dir level.')
+    parser.add_argument('--device', default='cuda',
+                        choices=['cpu', 'cuda'],
+                        help='Device for running.')
 
     args = parser.parse_args()
 
-    if args.save_errors_to is not None:
-        print('--save-errors-to passed, bs is set to 1.')
+    if args.save_errors:
+        print('--save-errors passed, bs is set to 1.')
         args.bs = 1
-        args.save_errors_to.mkdir(exist_ok=True, parents=True)
 
     return args
 
 
-def draw_attention(img, atts, pd_text, save_to):
+def draw_attention(img, atts, pd_text, save_to, gates=0):
     if len(atts.shape) == 2:
         atts.unsqueeze(-2)  # added H dim
 
@@ -57,21 +60,21 @@ def draw_attention(img, atts, pd_text, save_to):
     for i in range(atts.shape[0]):
         atts[i] = atts[i] / atts[i].max()
 
-
-    # cutting tralling <eos>
-    pd_text = pd_text[0]
-    idx = len(pd_text)
-    for i in range(len(pd_text) - 1, 0, -1):
-        if pd_text[i] != 'é':
-            break
-        idx = i + 1
-
-    pd_text = pd_text[:idx]
-    atts = atts[:idx]
+    # cutting by first <eos>
+    try:
+        idx = pd_text.index('é') + 1
+        pd_text = pd_text[:idx]
+        atts = atts[:idx]
+    except ValueError:
+        pass
 
     # draw and save each char
     color_img = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)
     for idx, (att, char) in enumerate(zip(atts, pd_text)):
+        if gates > 0:
+            shift = 2**2 * gates  # 2 maxpools and kernel
+            att = np.pad(att, ((0, 0), (shift, shift), (0, 0)))
+
         resized_att = cv2.resize(att, (img.shape[1], img.shape[0]),
                                  interpolation=cv2.INTER_NEAREST)
         attended_img = color_img.copy()
@@ -89,9 +92,7 @@ def main():
     args = get_args()
 
     print('Checkpoint loading')
-    device = torch.device('cpu')
-    if torch.cuda.is_available():
-        device = torch.device('cuda')
+    device = torch.device(args.device)
 
     ckpt = torch.load(args.model_path, map_location=device)
 
@@ -109,8 +110,9 @@ def main():
                     max_len=text_max_len,
                     augment=False,
                     return_path=True,
-                    correction=getattr(ckpt['args'], 'correction', True))
-    dl = DataLoader(ds, args.bs, num_workers=4, collate_fn=ds.collate_fn)
+                    correction=getattr(ckpt['args'], 'correction', True),
+                    load_to_ram=True)
+    dl = DataLoader(ds, args.bs, num_workers=1, collate_fn=ds.collate_fn)
 
     print('Model creation')
     model = create_model(c2i, i2c, ckpt['args']).to(device)
@@ -125,6 +127,18 @@ def main():
     final_cer, final_loss = 0.0, 0.0
     loader_size = len(dl)
     errors = {}
+    times =[]
+
+    errors_dir = None
+    if args.save_errors:
+        errors_dir = args.model_path.parent.parent / 'errors'
+        errors_dir.mkdir(exist_ok=True)
+
+    atts_dir = None
+    if args.save_atts:
+        atts_dir = args.model_path.parent.parent / 'atts'
+        atts_dir.mkdir(exist_ok=True)
+
     for idx, (img, text, lens, paths) in enumerate(tqdm(dl, desc='Evaluating')):
         img, text, lens = img.to(device), text.to(device), lens.to(device)
 
@@ -134,7 +148,10 @@ def main():
             pd_text = ds.tensor2text(pd_text)
             atts = None
         else:
+            start_time = time()
             log_probs, preds, atts = model(img)
+            end_time = time() - start_time
+            times.append(end_time)
             pd_text = ds.tensor2text(preds)
 
         # cer
@@ -149,37 +166,46 @@ def main():
                                       lens).item() / loader_size
 
         # attention
-        if args.save_atts and (atts is not None):
-            atts_dir = args.model_path.parent.parent / 'atts'
-            atts_dir.mkdir(exist_ok=True)
-
-            for im, att, img_path in zip(img, atts, paths):
+        if (atts_dir is not None) and (atts is not None):
+            for im, att, img_path, txt in zip(img, atts, paths, pd_text):
                 img_dir = atts_dir / img_path.stem
                 img_dir.mkdir(exist_ok=True)
-                draw_attention(im, att, pd_text, img_dir)
+                draw_attention(im, att, txt, img_dir,
+                               gates=getattr(ckpt['args'], 'gates', 0))
 
         # save errors
-        if (args.save_errors_to is not None) and cer > 0:
+        if (errors_dir is not None) and cer > 0:
             img_name = str(idx) + '.png'
             errors[img_name] = ({'name': paths[0].name,
                                  'gt': gt_text[0][:gt_lens[0]],
                                  'pd': pd_text[0][:gt_lens[0]]})
 
-            img_path = args.save_errors_to.joinpath(img_name)
+            # source image
+            img_path = errors_dir / img_name
             copyfile(paths[0], img_path)
 
-            img_path_aug = args.save_errors_to.joinpath(
-                img_path.stem + '_aug.' + img_path.suffix
-            )
-            img = (img.squeeze() * 255).cpu().numpy().astype(np.uint8)
-            cv2.imwrite(str(img_path_aug), img)
+            # attended image
+            # img_dir = errors_dir / img_path.stem
+            # img_dir.mkdir(exist_ok=True)
+            # draw_attention(img, atts[0], pd_text[0], img_dir,
+            #                gates=getattr(ckpt['args'], 'gates', 0))
 
-    if args.save_errors_to is not None:
-        with open(args.save_errors_to.joinpath('errors.json'), 'w') as f:
+            # image at the input of nn
+            img_p_aug = errors_dir / (img_path.stem + '_aug.' + img_path.suffix)
+            img = (img.squeeze() * 255).cpu().numpy().astype(np.uint8)
+            cv2.imwrite(str(img_p_aug), img)
+
+    if errors_dir is not None:
+        with open(errors_dir / '00_errors.json', 'w') as f:
             json.dump(errors, fp=f, indent=4)
 
     print(('Mean CER: %.3f' % final_cer) + '%')
-    print(('Mean loss: %.3f' % final_loss) + '%')
+    print('Mean loss: %.3f' % final_loss)
+
+    print('\nMin time:', int(min(times) * 1000), 'ms')
+    print('Max time:', int(max(times) * 1000), 'ms')
+    print('Mean time:', int(np.mean(times) * 1000), 'ms')
+    print('Median time:', int(np.median(times) * 1000), 'ms')
 
 
 if __name__ == '__main__':
