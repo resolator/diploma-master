@@ -244,10 +244,16 @@ class IAMDataset(Dataset):
         cv2.namedWindow('img', cv2.WINDOW_NORMAL)
         try:
             for i in range(n_samples):
-                img, text, lens = self.collate_fn([self[i]])
+                paths = None
+                if self.return_path:
+                    img, text, lens, paths = self.collate_fn([self[i]])
+                else:
+                    img, text, lens = self.collate_fn([self[i]])
+
                 img = (img.squeeze() * 255).numpy().astype(np.uint8)
 
-                print('\nImage shape:', img.shape)
+                print('\n' + str(paths[0]))
+                print('Image shape:', img.shape)
                 print(self.tensor2text(text[0][:lens[0]]))
 
                 cv2.imshow('img', img)
