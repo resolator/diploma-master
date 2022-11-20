@@ -1,15 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*
 """Training epoch for different models.."""
-import sys
 import torch
-
 import numpy as np
-
 from tqdm import tqdm
-from pathlib import Path
-
-sys.path.append(str(Path(sys.path[0]).parent))
 from common.utils import calc_cer
 
 
@@ -54,20 +48,20 @@ def epoch_step_baseline(model, loaders, device, optim, *args, **kwargs):
         loader_size = len(loaders[stage])
 
         torch.set_grad_enabled(is_train)
-        for i, (img, text, lens) in enumerate(tqdm(loaders[stage], desc=stage)):
+        for i, (img, txt, lens) in enumerate(tqdm(loaders[stage], desc=stage)):
             if is_train:
                 optim.zero_grad()
 
             # forward
-            img, text, lens = img.to(device), text.to(device), lens.to(device)
+            img, txt, lens = img.to(device), txt.to(device), lens.to(device)
             logits, log_probs = model(img)
 
             # loss
-            loss = model.calc_loss(logits, log_probs, text, lens)
+            loss = model.calc_loss(logits, log_probs, txt, lens)
             metrics['loss'][stage] += loss.item() / loader_size
 
             # cer
-            gt_text = loaders[stage].dataset.tensor2text(text)
+            gt_text = loaders[stage].dataset.tensor2text(txt)
             pd_beam, _ = model.decode(log_probs)
             pd_beam = loaders[stage].dataset.tensor2text(pd_beam)
 
@@ -83,7 +77,9 @@ def epoch_step_baseline(model, loaders, device, optim, *args, **kwargs):
             # print
             if i == 0:
                 gt_text = gt_text[0][:lens[0]]
-                pd_text = loaders[stage].dataset.tensor2text(preds[:, 0][:lens[0]])
+                pd_text = loaders[stage].dataset.tensor2text(
+                    preds[:, 0][:lens[0]]
+                )
                 pd_beam = pd_beam[0][:lens[0]]
 
                 print('\nGT:', gt_text)
@@ -108,20 +104,20 @@ def epoch_step_seq2seq(model, loaders, device, optim, writer, epoch):
 
         torch.set_grad_enabled(is_train)
         img_count = 0
-        for i, (img, text, lens) in enumerate(tqdm(loaders[stage], desc=stage)):
+        for i, (img, txt, lens) in enumerate(tqdm(loaders[stage], desc=stage)):
             if is_train:
                 optim.zero_grad()
 
             # forward
-            img, text, lens = img.to(device), text.to(device), lens.to(device)
-            logs_probs, preds, atts = model(img, text)
+            img, txt, lens = img.to(device), txt.to(device), lens.to(device)
+            logs_probs, preds, atts = model(img, txt)
 
             # loss
-            loss = model.calc_loss(logs_probs, text, lens)
+            loss = model.calc_loss(logs_probs, txt, lens)
             metrics['loss'][stage] += loss.item() / loader_size
 
             # cer
-            gt_text = loaders[stage].dataset.tensor2text(text)
+            gt_text = loaders[stage].dataset.tensor2text(txt)
             gt_lens = lens.detach().cpu().numpy()
 
             pd_text = loaders[stage].dataset.tensor2text(preds)
@@ -136,7 +132,9 @@ def epoch_step_seq2seq(model, loaders, device, optim, writer, epoch):
             # print
             if i == 0:
                 gt_text = gt_text[0][:lens[0]]
-                pd_text = loaders[stage].dataset.tensor2text(preds[0][:lens[0]])
+                pd_text = loaders[stage].dataset.tensor2text(
+                    preds[0][:lens[0]]
+                )
 
                 print('\nGT:', gt_text)
                 print('PD:', pd_text)

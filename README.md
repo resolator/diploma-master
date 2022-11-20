@@ -1,4 +1,4 @@
-# Research project within the scope of the master's thesis.
+# [WIP] Research project within the scope of the master's thesis.
 
 ## Thesis
 Investigation of the influence of architectural features of neural networks in the task of recognizing handwritten text without explicit segmentation on characters.
@@ -6,13 +6,13 @@ Investigation of the influence of architectural features of neural networks in t
 ## Problem formulation
 ### Input
 An image of a cut-out single-line handwritten text. Examples:
-![iam_examples](content/iam_examples.png)
+![iam_examples](data/iam_examples.png)
 
 ### Output
 A recognized text from the input image.
 
 ### Training dataset
-[IAM](https://fki.tic.heia-fr.ch/databases/iam-handwriting-database) with [IAM-B](data/IAM_splits/IAM-B/) splitting.
+[IAM](https://fki.tic.heia-fr.ch/databases/iam-handwriting-database) with [IAM-B](https://github.com/shonenkov/IAM-Splitting) splitting.
 
 ### Training conditions
 - Expand input with white pixels (32 for horizontal axis, 16 for vertical).
@@ -33,3 +33,8 @@ Link?
 
 
 ## Repo structure
+
+## Requirements
+git clone --recursive https://github.com/parlance/ctcdecode.git
+https://github.com/parlance/ctcdecode
+cd ctcdecode && pip install .

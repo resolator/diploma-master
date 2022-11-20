@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*
 """Training launcher."""
-import sys
 import torch
 import configargparse
 
@@ -15,7 +14,6 @@ from torch.utils.tensorboard import SummaryWriter
 from iam_dataset import IAMDataset
 from epoch_steps import get_epoch_step_fn, get_metrics_dict
 
-sys.path.append(str(Path(sys.path[0]).parent))
 from common.utils import build_alphabet, create_model, print_model_params
 from common.conv_net import get_models_list
 
