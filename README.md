@@ -103,7 +103,24 @@ Another small change was testes - switch from LSTM to GRU, because the last one 
 As we can see GRU shows worse quality so will not applied to the future experiments.
 
 ### Gates
+In view that the PositionalEncoder can't fully compensate the removed encoder RNN it is necessary to find a solution. The hypothesis is that some gating mechanism was also removed with the encoder. To test that a gating mechanism from [this paper](https://arxiv.org/abs/2012.04961) was added (experiment name ``).
 
+| Кол-во блоков     | 0         | 1         | 2         | 3         |
+|-------------------|-----------|-----------|-----------|-----------|
+| Кол-во параметров | 1,384,210 | 1,518,354 | 1,652,498 | 1,786,642 |
+| Эффект            |           | +134,144  | +268,288  | +402,432  |
+|                   |           |           |           |           |
+| CER               | 19.672    | 15.799    | 18.388    | 18.776    |
+| Эффект            |           | -3.963    | -1.374    | -0.986    |
+|                   |           |           |           |           |
+| GPU (BS=24)       | 52 ms     | 64 ms     | 66 ms     | 69 ms     |
+| Эффект            |           | +23.1%    | +26.9%    | +32.7%    |
+|                   |           |           |           |           |
+| CPU (BS=24)       | 4975 ms   | 5076 ms   | 5317 ms   | 7237 ms   |
+| Эффект            |           | +2%       | +6.9%     | +45.5%    |
+|                   |           |           |           |           |
+| CPU (BS=1)        | 248 ms    | 266 ms    | 278 ms    | 285 ms    |
+| Эффект            |           | +7.3%     | +12.1%    | +14.9%    |
 
 ### Replacing regular convolution with depthwise separable convolution
 ### Increasing the backbone output size
