@@ -125,8 +125,46 @@ In view that the PositionalEncoder can't fully compensate the removed encoder RN
 Best performance was achieved with a single gating block. This model has less parameters and works faster than the baseline but has a bit worse quality (`15.799` vs `14.768`).
 
 ### Replacing regular convolution with depthwise separable convolution
+Another interesting trick from the [paper](https://arxiv.org/abs/2012.04961) is to use the depthwise separable convolution instead of regular convolution. To test effect of this all convolutions in the backbone were changed to DSC with different `k` parameter (experiment names `2022-06-16_seq2seqL_dsc_k1`, `2022-06-16_seq2seqL_dsc_k2`, `2022-06-15-seq2seqL_dsc_k3` and `2022-06-15-seq2seqL_dsc_k4`).
+
+Comparison with `2022-06-14_seq2seqL_gate_1` model from the previous paragraph:
+| k              | 1         | 2         | 3         | 4         |
+|----------------|-----------|-----------|-----------|-----------|
+| Parameters num | 1,014,252 | 1,143,782 | 1,273,312 | 1,402,842 |
+| Impact         | -504,102  | -374,572  | -245,042  | -115,512  |
+|                |           |           |           |           |
+| CER            | 21.304    | 18.773    | 17.579    | 17.869    |
+| Impact         | +5.505    | +2.974    | +1.78     | +2.07     |
+|                |           |           |           |           |
+| GPU (BS=24)    | 67 ms     | 68 ms     | 68 ms     | 69 ms     |
+| Impact         | +4.7%     | +6.2%     | +6.2%     | +7.8%     |
+|                |           |           |           |           |
+| CPU (BS=24)    | 5468 ms   | 6225 ms   | 6684 ms   | 7380 ms   |
+| Impact         | +7.7%     | +22.6%    | +31.7%    | +45.4%    |
+|                |           |           |           |           |
+| CPU (BS=1)     | 231 ms    | 263 ms    | 278 ms    | 289 ms    |
+| Impact         | -13.2%    | -1.1%     | +4.5%     | +8.6%     |
+
+The quality decreased but also the number of parameters decreased too. This could be useful for embedded devices.
+
 ### Increasing the backbone output size
+Since the removed encoder contained a lot of parameters as a possible improvement could be to add removed parameters to adjacent layers. For this purpose the output size of the backbone was increased from 256 to 384 (experiment name `2022-06-14_seq2seqL_bb_384`).
+
+| Output size    | 256       | 384                  |
+|----------------|-----------|----------------------|
+| Parameters num | 1,518,354 | 1,880,466 (+362,112) |
+| CER            | 15.799    | 15.361 (-0.438)      |
+
+A small quality improvement with a large increase in the number of parameters.
+
 ### Increasing the attention hidden size
+The same logic was applied to the attention layer (experiment names `2022-06-14_seq2seqL_attn_384`, `2022-06-14_seq2seqL_attn_512` and `2022-06-18_seq2seqL_attn_192`).
+
+| Attention size | 192                 | 256       | 384                 | 512                  |
+|----------------|---------------------|-----------|---------------------|----------------------|
+| Parameters num | 1,485,394 (-32,960) | 1,518,354 | 1,584,274 (+65,920) | 1,650,194 (+131,840) |
+| CER            | 16.557 (+0.758)     | 15.799    | 16.113 (+0.314)     | 16.228 (+0.429)      |
+
 ### 2D attention
 
 
