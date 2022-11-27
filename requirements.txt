@@ -1,13 +1,13 @@
 pybind11
-torch
+torch>=1.8.1
 torchvision
 numpy
 tqdm
-tornado
 tensorflow
 tensorboard
 configargparse
-opencv-contrib-python
+opencv-contrib-python>=4.5.3
 fastwer
 timm
 albumentations
+git+https://github.com/parlance/ctcdecode@c90ad94a0b19554f80804fb7812f2a1447a34a70
