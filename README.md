@@ -2,16 +2,20 @@
 ## Thesis
 Investigation of the influence of architectural features of neural networks in the task of recognizing handwritten text without explicit segmentation on characters.
 
+
 ## Problem formulation
 ### Input
 An image of a cut-out single-line handwritten text. Examples:
 ![iam_examples](data/iam_examples.png)
 
+
 ### Output
 A recognized text from the input image.
 
+
 ### Training dataset
 [IAM](https://fki.tic.heia-fr.ch/databases/iam-handwriting-database) with [IAM-B](https://github.com/shonenkov/IAM-Splitting) splitting.
+
 
 ### Training conditions
 - No preatrained models.
@@ -27,6 +31,7 @@ A recognized text from the input image.
 
 More hyperparameters can be found in config (.cfg) files (like [this](scripts/train.cfg)).
 
+
 ## General idea
 Let's start from the baseline. It is typical seq2seq architecure with Bahdanau attention:
 ![proposal_before](data/proposal_before.png)
@@ -37,6 +42,7 @@ General hypothesis is that we can skip the `Encoder RNN` part and apply the atte
 It this works, then we could interpret attention maps as a segmentations maps for each decoded symbol. This will be also checked in this work.
 
 Also some secondary hypotheses will be checked.
+
 
 ## Experiments
 ### Baseline
@@ -52,6 +58,7 @@ Conv 1x1, 256 channels  -> Batch Norm -> ReLU -> Max Pool 2x1
 
 The baseline seq2seq achieved `16.211` CER on the test subset (experiment name is `2022-06-14_seq2seq`).
 
+
 ### Replacing encoder RNN with PositionalEncoder
 The first experiment is very simple: let's just remove the encoder RNN. Attention is looking on the raw output from backbone. Model can't train - CER is `75.32` (experiment name is `2022-06-16_seq2seqL_seq2seq_no_enc`). It took into account embeddings only totally ignored the visual part.
 
@@ -65,6 +72,7 @@ Comparison table:
 | GPU (BS=24)    | 68 ms     | 50 ms     | −26.5%   |
 | CPU (BS=24)    | 4141 ms   | 3673 ms   | −11.3%   |
 | CPU (BS=1)     | 281 ms    | 201 ms    | −28.5%   |
+
 
 ### Normalization layer
 To avoid dependence on the batch size the following experiment was carried out to replace BatchNorm with InstanceNorm (experiment name is `2022-06-13_seq2seqL_LN_5e-4`).
@@ -89,6 +97,7 @@ In view that the normalization switch led to quality improvement the same change
 
 In the end, the relative effect is the same (-8.5% and -8.9% CER) but the processing time increased. Most likely the InstanceNorm implementation that was used is not efficient enough.
 
+
 ### Recurrency layer
 Another small change was testes - switch from LSTM to GRU, because the last one has less parameters (experiment name is `2022-06-13_seq2seqL_gru`).
 
@@ -101,6 +110,7 @@ Another small change was testes - switch from LSTM to GRU, because the last one 
 | CPU (BS=1)      | 248 ms    | 256 ms    | +3.2%    |
 
 GRU shows worse quality so will not applied to the future experiments.
+
 
 ### Gates
 In view that the PositionalEncoder can't fully compensate the removed encoder RNN it is necessary to find a solution. The hypothesis is that some gating mechanism was also removed with the encoder. To test that a gating mechanism from [this paper](https://arxiv.org/abs/2012.04961) was added (experiment names `2022-06-14_seq2seqL_gate_1`, `2022-06-14_seq2seqL_gate_2` and `2022-06-14_seq2seqL_gate_3`).
@@ -123,6 +133,7 @@ In view that the PositionalEncoder can't fully compensate the removed encoder RN
 | Impact         |           | +7.3%     | +12.1%    | +14.9%    |
 
 Best performance was achieved with a single gating block. This model has less parameters and works faster than the baseline but has a bit worse quality (`15.799` vs `14.768`).
+
 
 ### Replacing regular convolution with depthwise separable convolution
 Another interesting trick from the [paper](https://arxiv.org/abs/2012.04961) is to use the depthwise separable convolution instead of regular convolution. To test effect of this all convolutions in the backbone were changed to DSC with different `k` parameter (experiment names `2022-06-16_seq2seqL_dsc_k1`, `2022-06-16_seq2seqL_dsc_k2`, `2022-06-15-seq2seqL_dsc_k3` and `2022-06-15-seq2seqL_dsc_k4`).
@@ -147,6 +158,7 @@ Comparison with `2022-06-14_seq2seqL_gate_1` model from the previous paragraph:
 
 The quality decreased but also the number of parameters decreased too. This could be useful for embedded devices.
 
+
 ### Increasing the backbone output size
 Since the removed encoder contained a lot of parameters as a possible improvement could be to add removed parameters to adjacent layers. For this purpose the output size of the backbone was increased from 256 to 384 (experiment name `2022-06-14_seq2seqL_bb_384`).
 
@@ -157,6 +169,7 @@ Since the removed encoder contained a lot of parameters as a possible improvemen
 
 A small quality improvement with a large increase in the number of parameters.
 
+
 ### Increasing the attention hidden size
 The same logic was applied to the attention layer (experiment names `2022-06-14_seq2seqL_attn_384`, `2022-06-14_seq2seqL_attn_512` and `2022-06-18_seq2seqL_attn_192`).
 
@@ -164,6 +177,7 @@ The same logic was applied to the attention layer (experiment names `2022-06-14_
 |----------------|---------------------|-----------|---------------------|----------------------|
 | Parameters num | 1,485,394 (-32,960) | 1,518,354 | 1,584,274 (+65,920) | 1,650,194 (+131,840) |
 | CER            | 16.557 (+0.758)     | 15.799    | 16.113 (+0.314)     | 16.228 (+0.429)      |
+
 
 ### 2D attention
 To test the hypothesis that the network can learn character segmentation without segmentation markup the architecure should be changed. Previously the attention layer was applied to 1D features map from the backbone. To increase the resolution of the attention the kernel sizes for some pooling layers were decreased to get the height 4 and 8 pixels (experiment names `2022-06-14_seq2seqL_gate_1_expand_h` and `2022-06-15_seq2seqL_expand_h_8` respectively). Additional experiment with height=8 is based on height=4 but the input height was increased from 64 to 128 (experiment name `2022-06-15_seq2seqL_expand_h_128`).
@@ -184,8 +198,9 @@ To test the hypothesis that the network can learn character segmentation without
 
 The results show that this approach improves CER but with high cost in performance.
 
+
 #### 2D attention maps
-Nonetheless, this experiment is also interesting because attention maps.
+Nonetheless, this experiment is also interesting because attention maps. Let's have a look at visualizations on the test subset.
 
 |![c04-110-01.gif](data/gifs/c04-110-01.gif)                 |
 |------------------------------------------------------------|
@@ -207,20 +222,41 @@ Nonetheless, this experiment is also interesting because attention maps.
 |--------------------------------------------------|
 |Decoded text: Poc gave her hand a shake. "Wake up |
 
+Looks like the attention module is trying to look on a single character. The exception is a "space" character. Here are some examples:
+
+![space_attention.png](data/space_attention.png)
+
+The last two examples looks logical. But the first two are not easily explainable. Also we can see how the attention module uses the information from the decoder:
+
+![attended_for_2_chars.png](data/attended_for_2_chars.png)
+
+The model looked at two characters at a single decoding step. It leads to the assumption that the attention module learned some language model functionality.
+
+
+## Conclusions
+Conducted experiments show that replacing encoder with a positional encoder layer with gate block has advantages in number of parameters (-14.7%) and speed of processing (-20.6% on CPU) but also has a disadvantage in recognition quality (+7.3%). So this replacement could be useful for cases where the size and speed are more important than quality (for embedded devices, for example).
+
+For the same purpose a DSC layer can be used. But this point requires more investigation based on [this](https://arxiv.org/abs/2012.04961) paper.
+
+2D attention experiments show that the research in this direction can lead to development of a new mechanism of segmentation (or at least - detection) which doesn't require localization markup.
+
+Other conclusions:
+- Instance normalization gives better quality than Batch normalization. Perhaps because of the strong dependence of the latter on the size of batch.
+- LSTM gives better quality that GRU as a decoder, although it contains more parameters.
+- Parameters from the removed encoder can be partially compensated by increasing the backbone output size.
+
 
 ## Experiments results
 [Google Sheet](https://docs.google.com/spreadsheets/d/1lyGR1rrdM_5rV6hFVAG-l_qH5hY_nFo-RYbRMune5wY/edit?usp=sharing)
 
 
-## Conclusions
-
-
-
 ## Full text
 At the moment, the full text of the dissertation is available only in Russian (by [this](https://drive.google.com/file/d/1j2pHa8LQBd930r8wSNea7oac5xRiwgHQ/view?usp=sharing) link).
 
+
 ## Requirements
 All requirements can be found in [requirements.txt](requirements.txt).
+
 
 ## Usage
 Better to run training from the `scripts/` directory. Otherwise change paths to dataset in config files (or don't use them).
