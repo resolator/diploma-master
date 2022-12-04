@@ -166,7 +166,46 @@ The same logic was applied to the attention layer (experiment names `2022-06-14_
 | CER            | 16.557 (+0.758)     | 15.799    | 16.113 (+0.314)     | 16.228 (+0.429)      |
 
 ### 2D attention
+To test the hypothesis that the network can learn character segmentation without segmentation markup the architecure should be changed. Previously the attention layer was applied to 1D features map from the backbone. To increase the resolution of the attention the kernel sizes for some pooling layers were decreased to get the height 4 and 8 pixels (experiment names `2022-06-14_seq2seqL_gate_1_expand_h` and `2022-06-15_seq2seqL_expand_h_8` respectively). Additional experiment with height=8 is based on height=4 but the input height was increased from 64 to 128 (experiment name `2022-06-15_seq2seqL_expand_h_128`).
 
+| Feature map height | 1       | 4        | 8        | 8 (128)       |
+|--------------------|---------|----------|----------|---------------|
+| CER                | 15.799  | 15.399   | 14.839   | 15.224        |
+| Impact             |         | -0.4     | -0.906   | -0.575        |
+|                    |         |          |          |               |
+| GPU (BS=24)        | 64 ms   | 68 ms    | 81 ms    | 86 ms (BS=14) |
+| Impact             |         | +6.2%    | +26.6%   | +34.4%        |
+|                    |         |          |          |               |
+| CPU (BS=24)        | 5076 ms | 13928 ms | 23519 ms | 42718 ms      |
+| Impact             |         | +174.4%  | +363.3%  | +741.6%       |
+|                    |         |          |          |               |
+| CPU (BS=1)         | 266 ms  | 346 ms   | 486 ms   | 1014 ms       |
+| Impact             |         | +30.1%   | +82.7%   | +281.2%       |
+
+The results show that this approach improves CER but with high cost in performance.
+
+#### 2D attention maps
+Nonetheless, this experiment is also interesting because attention maps.
+
+|![c04-110-01.gif](data/gifs/c04-110-01.gif)                 |
+|------------------------------------------------------------|
+|Decoded text: for a man who had been seen leaving the train |
+
+|![f04-039-04.gif](data/gifs/f04-039-04.gif)                 |
+|------------------------------------------------------------|
+|Decoded text: for a man who had been seen leaving the train |
+
+|![f04-083-02.gif](data/gifs/f04-083-02.gif)                    |
+|---------------------------------------------------------------|
+|Decoded text: reuaned a mystery until later tne following day, |
+
+|![n02-040-02.gif](data/gifs/n02-040-02.gif)             |
+|--------------------------------------------------------|
+|Decoded text: beside Gim. "Is that all you vand to do?" |
+
+|![p02-115-00.gif](data/gifs/p02-115-00.gif)       |
+|--------------------------------------------------|
+|Decoded text: Poc gave her hand a shake. "Wake up |
 
 
 ## Experiments results
